@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Emit a self-contained server bundle (.next/standalone) for the prod Docker image.
-  output: "standalone",
+  // Standalone server bundle for the Docker prod image only. On Vercel, let Vercel
+  // build/run it — `output: standalone` breaks Vercel's serverless runtime
+  // (ReferenceError: __dirname). Vercel sets process.env.VERCEL=1.
+  output: process.env.VERCEL ? undefined : "standalone",
 };
 
 export default nextConfig;
