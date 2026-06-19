@@ -14,17 +14,21 @@ const NAV = [
   { href: "/admin/runs", label: "Admin", Icon: Settings2 },
 ];
 
+function isActive(pathname: string, href: string): boolean {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-surface">
+    <aside className="hidden w-52 shrink-0 flex-col border-r border-border bg-surface md:flex">
       <div className="border-b border-border px-4 py-4">
         <div className="text-sm font-semibold text-fg">ScoreSeer</div>
         <div className="text-xs text-fg-muted">World Cup 2026 · accuracy lab</div>
       </div>
       <nav className="flex flex-col gap-0.5 p-2">
         {NAV.map(({ href, label, Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = isActive(pathname, href);
           return (
             <Link
               key={href}
@@ -43,5 +47,32 @@ export function Sidebar() {
         })}
       </nav>
     </aside>
+  );
+}
+
+/** Fixed bottom tab bar — the mobile replacement for the sidebar (thumb-reachable). */
+export function MobileNav() {
+  const pathname = usePathname();
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
+      {NAV.map(({ href, label, Icon }) => {
+        const active = isActive(pathname, href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-label={label}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px]",
+              active ? "text-primary" : "text-fg-muted",
+            )}
+          >
+            <Icon className="h-5 w-5" />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

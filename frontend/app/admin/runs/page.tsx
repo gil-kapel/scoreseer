@@ -1,4 +1,4 @@
-import { AutoRefresh, RunControls, StopButton } from "@/components/run-controls";
+import { AutoRefresh, RunControls, RunProgress, StopButton } from "@/components/run-controls";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -24,21 +24,31 @@ function statusTone(status: string) {
 
 function RunRow({ run }: { run: RunRead }) {
   const t = run.totals as { succeeded?: number; skipped?: number; failed?: number };
+  const running = run.status === "running";
+  const cap = typeof run.params?.cap === "number" ? (run.params.cap as number) : undefined;
   return (
     <TableRow>
       <TableCell className="text-sm text-foreground">{run.type}</TableCell>
-      <TableCell className="text-xs text-muted-foreground">{run.trigger}</TableCell>
+      <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+        {run.trigger}
+      </TableCell>
       <TableCell>
         <Badge tone={statusTone(run.status)}>{run.status}</Badge>
       </TableCell>
-      <TableCell className="nums text-xs text-muted-foreground">
+      <TableCell className="nums hidden text-xs text-muted-foreground md:table-cell">
         {fmtKickoff(run.started_at)}
       </TableCell>
       <TableCell className="nums text-xs text-muted-foreground">
-        {(t.succeeded ?? 0)}✓ · {(t.skipped ?? 0)} skip · {(t.failed ?? 0)}✗
+        {running ? (
+          <RunProgress startedAt={run.started_at} type={run.type} count={cap} />
+        ) : (
+          <span>
+            {t.succeeded ?? 0}✓ · {t.skipped ?? 0} skip · {t.failed ?? 0}✗
+          </span>
+        )}
       </TableCell>
       <TableCell className="text-right">
-        {run.status === "running" ? <StopButton runId={run.id} /> : null}
+        {running ? <StopButton runId={run.id} /> : null}
       </TableCell>
     </TableRow>
   );
@@ -51,7 +61,7 @@ export default async function AdminRunsPage() {
   return (
     <div className="space-y-6">
       <AutoRefresh active={anyRunning} />
-      <header className="flex items-start justify-between">
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Runs</h1>
           <p className="max-w-lg text-sm text-muted-foreground">
@@ -72,10 +82,10 @@ export default async function AdminRunsPage() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Type</TableHead>
-                <TableHead>Trigger</TableHead>
+                <TableHead className="hidden md:table-cell">Trigger</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Started</TableHead>
-                <TableHead>Totals</TableHead>
+                <TableHead className="hidden md:table-cell">Started</TableHead>
+                <TableHead>Progress</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>

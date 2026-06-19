@@ -17,13 +17,13 @@ export const dynamic = "force-dynamic";
 function MatchHeader({ m }: { m: MatchDetail }) {
   const { fixture } = m;
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div className="text-xs text-fg-muted">
           {fixture.stage}
           {fixture.group_label ? ` · ${fixture.group_label}` : ""} · {fmtKickoff(fixture.kickoff_utc)}
         </div>
-        <div className="mt-2 flex items-center gap-3 text-lg font-semibold text-fg">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-lg font-semibold text-fg">
           <TeamFlag team={fixture.home} size={24} />
           {fixture.home.name}
           <span className="px-1 text-sm text-fg-muted">v</span>
@@ -31,7 +31,7 @@ function MatchHeader({ m }: { m: MatchDetail }) {
           <TeamFlag team={fixture.away} size={24} />
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         <StatusChip status={fixture.prediction_status} />
         <PredictMatchButton fixtureId={fixture.id} predicting={m.predicting} />
       </div>

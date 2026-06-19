@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { HeaderStrip } from "@/components/header-strip";
-import { Sidebar } from "@/components/sidebar";
+import { MobileNav, Sidebar } from "@/components/sidebar";
 import { api, safe } from "@/lib/api";
 
 import "./globals.css";
@@ -26,9 +26,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Sidebar />
           <div className="flex flex-1 flex-col overflow-hidden">
             <HeaderStrip metrics={metrics} />
-            <main className="flex-1 overflow-auto p-6">{children}</main>
+            {/* pb-24 on mobile leaves room for the fixed bottom nav */}
+            <main className="flex-1 overflow-auto p-4 pb-24 md:p-6 md:pb-6">{children}</main>
           </div>
         </div>
+        <MobileNav />
       </body>
     </html>
   );
