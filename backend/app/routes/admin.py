@@ -21,6 +21,7 @@ from app.services.run_service import request_cancel
 from app.workers.runner import (
     run_backfill,
     run_batch_backfill,
+    run_batch_predict,
     run_grade,
     run_poisson,
     run_predict,
@@ -37,12 +38,15 @@ _RUNNERS = {
     "grade": run_grade,
     "backfill": run_backfill,
     "batch_backfill": run_batch_backfill,
+    "batch_predict": run_batch_predict,
     "poisson": run_poisson,
 }
 
 
 class TriggerRun(BaseModel):
-    type: Literal["predict", "grade", "backfill", "batch_backfill", "poisson"]
+    type: Literal[
+        "predict", "grade", "backfill", "batch_backfill", "batch_predict", "poisson"
+    ]
     count: int | None = Field(default=None, ge=1, le=104)
 
 

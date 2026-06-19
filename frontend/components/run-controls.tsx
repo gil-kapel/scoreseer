@@ -13,7 +13,12 @@ const TYPES = [
     label: "Regenerate Poisson",
     hint: "rebuild + regrade the free Poisson baseline (no Claude)",
   },
-  { value: "predict", label: "Predict (forward)", hint: "real Claude calls on upcoming matches" },
+  {
+    value: "batch_predict",
+    label: "Predict upcoming (batch)",
+    hint: "cheap forward LLM predictions, no web search — ~$0.005/match",
+  },
+  { value: "predict", label: "Predict (forward + web)", hint: "real Claude + live web search (pricier)" },
   { value: "backfill", label: "Backfill (past)", hint: "real Claude + web search on played matches" },
   {
     value: "batch_backfill",
@@ -30,13 +35,13 @@ export function RunControls() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function start() {
-    const costly = type === "predict" || type === "backfill" || type === "batch_backfill";
-    const note =
-      type === "batch_backfill"
-        ? `A batch backfill makes batched (50%-off) Claude predictions for up to ${count} past ` +
-          "matches — ~$0.005 each, no web search. Continue?"
-        : `A ${type} run makes REAL Claude calls (web search + LLM) for up to ${count} fixtures ` +
-          "and incurs API cost. Continue?";
+    const cheap = type === "batch_backfill" || type === "batch_predict";
+    const costly = cheap || type === "predict" || type === "backfill";
+    const note = cheap
+      ? `A batch makes batched (50%-off) Claude predictions for up to ${count} matches ` +
+        "— ~$0.005 each, no web search. Continue?"
+      : `A ${type} run makes REAL Claude calls (web search + LLM) for up to ${count} fixtures ` +
+        "and incurs API cost. Continue?";
     if (costly && !window.confirm(note)) {
       return;
     }

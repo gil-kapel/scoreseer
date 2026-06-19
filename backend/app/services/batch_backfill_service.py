@@ -9,7 +9,7 @@ without polluting the lab.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,9 +33,11 @@ class BatchBackfillService:
         self.predictor = predictor
         self.repo = PredictionRepository(session)
 
-    async def run(self, *, cap: int | None) -> dict:
+    async def run(self, *, cap: int | None, forward: bool = False) -> dict:
+        """Batch-predict matches. forward=False backfills FINISHED matches (is_backfill);
+        forward=True predicts the next UPCOMING matches (honest forward predictions)."""
         log = logger.bind(component="BatchBackfillService")
-        fixtures = await self._finished(cap)
+        fixtures = await (self._upcoming(cap) if forward else self._finished(cap))
         if not fixtures:
             return {"status": "no_fixtures", "submitted": 0, "stored": 0, "succeeded": 0}
         teams = await self._team_map(fixtures)
@@ -58,7 +60,9 @@ class BatchBackfillService:
             if fixture is None:
                 continue
             home, away = teams[fixture.home_team_id], teams[fixture.away_team_id]
-            await self._store(fixture, home, away, out, model_id, calib_version)
+            await self._store(
+                fixture, home, away, out, model_id, calib_version, is_backfill=not forward
+            )
             stored += 1
             succeeded += int(out is not None)
         await self.session.commit()
@@ -70,6 +74,17 @@ class BatchBackfillService:
         stmt = (
             select(Fixture)
             .where(col(Fixture.status) == "finished")
+            .order_by(col(Fixture.kickoff_utc))
+        )
+        if cap:
+            stmt = stmt.limit(cap)
+        return list((await self.session.execute(stmt)).scalars().all())
+
+    async def _upcoming(self, cap: int | None) -> list[Fixture]:
+        now = datetime.now(UTC)
+        stmt = (
+            select(Fixture)
+            .where(col(Fixture.status) == "scheduled", col(Fixture.kickoff_utc) >= now)
             .order_by(col(Fixture.kickoff_utc))
         )
         if cap:
@@ -146,6 +161,8 @@ class BatchBackfillService:
         out: PredictionOutput | None,
         model_id: str,
         calibration_version: int,
+        *,
+        is_backfill: bool,
     ) -> None:
         if out is None:
             fields = dict(
@@ -170,7 +187,7 @@ class BatchBackfillService:
             model_id=model_id, calibration_version=calibration_version,
         )
         fields.update(
-            snapshot_id=None, is_backfill=True, model_id=model_id,
+            snapshot_id=None, is_backfill=is_backfill, model_id=model_id,
             prompt_version=PROMPT_VERSION, schema_version=SCHEMA_VERSION,
             calibration_version=calibration_version,
         )

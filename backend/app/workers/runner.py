@@ -161,17 +161,17 @@ async def run_poisson(trigger: str, *, cap: int | None = None) -> dict:
     return {"status": status, "upserted": upserted}
 
 
-async def run_batch_backfill(trigger: str, *, cap: int | None = None) -> dict:
-    """LLM predictions on past matches via one Anthropic batch (50% off, no web search).
+async def _run_batch(trigger: str, cap: int | None, *, forward: bool, run_type: str) -> dict:
+    """Shared driver for batch backfill (finished) + batch predict (upcoming).
 
-    Records a Run row so it shows in the admin table, then grades the new
-    predictions. Long batches are better run from the CLI — a free-tier backend can
-    spin down mid-poll and kill the background task.
+    50% off, no web search. Records a Run row; backfill is graded after (forward
+    predictions grade later, once the matches are played). Long batches are better
+    from the CLI — a free-tier backend can spin down mid-poll and kill the task.
     """
-    log = logger.bind(component="run_batch_backfill")
+    log = logger.bind(component=run_type)
     sm = get_sessionmaker()
     async with sm() as session:
-        run = Run(type="batch_backfill", trigger=trigger, status="running", params={"cap": cap})
+        run = Run(type=run_type, trigger=trigger, status="running", params={"cap": cap})
         session.add(run)
         await session.commit()
         run_id = run.id
@@ -180,7 +180,7 @@ async def run_batch_backfill(trigger: str, *, cap: int | None = None) -> dict:
     status = "succeeded"
     try:
         async with sm() as session:
-            summary = await BatchBackfillService(session, predictor).run(cap=cap)
+            summary = await BatchBackfillService(session, predictor).run(cap=cap, forward=forward)
         if not summary.get("stored"):
             status = "partial"
     except Exception as exc:  # noqa: BLE001 — surface failure on the run row, don't crash
@@ -203,6 +203,16 @@ async def run_batch_backfill(trigger: str, *, cap: int | None = None) -> dict:
             }
             await session.commit()
 
-    if status != "failed":
-        await run_grade(trigger)
+    if status != "failed" and not forward:
+        await run_grade(trigger)  # forward predictions are graded later, when played
     return summary
+
+
+async def run_batch_backfill(trigger: str, *, cap: int | None = None) -> dict:
+    """LLM predictions on PAST matches via one Anthropic batch (labeled, then graded)."""
+    return await _run_batch(trigger, cap, forward=False, run_type="batch_backfill")
+
+
+async def run_batch_predict(trigger: str, *, cap: int | None = None) -> dict:
+    """Honest forward LLM predictions on the next UPCOMING matches (cheap, no web search)."""
+    return await _run_batch(trigger, cap, forward=True, run_type="batch_predict")
