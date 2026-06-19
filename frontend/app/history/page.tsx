@@ -20,10 +20,12 @@ export const revalidate = 45; // ISR: serve from CDN, refresh in the background
 function Row({ r }: { r: HistoryRow }) {
   return (
     <TableRow className={r.is_backfill ? "opacity-55" : undefined}>
-      <TableCell className="nums text-xs text-muted-foreground">
+      <TableCell className="nums hidden text-xs text-muted-foreground md:table-cell">
         {fmtKickoff(r.kickoff_utc)}
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">{r.group_label ?? r.stage}</TableCell>
+      <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+        {r.group_label ?? r.stage}
+      </TableCell>
       <TableCell>
         <Link href={`/matches/${r.fixture_id}`} className="text-sm text-foreground hover:text-primary">
           {r.home} <span className="text-muted-foreground">v</span> {r.away}
@@ -86,8 +88,8 @@ export default async function HistoryPage({
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>Kickoff</TableHead>
-                <TableHead>Stage</TableHead>
+                <TableHead className="hidden md:table-cell">Kickoff</TableHead>
+                <TableHead className="hidden md:table-cell">Stage</TableHead>
                 <TableHead>Match</TableHead>
                 <TableHead>Pred</TableHead>
                 <TableHead>Actual</TableHead>
