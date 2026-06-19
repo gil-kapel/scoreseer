@@ -30,11 +30,12 @@ class Settings(BaseSettings):
     )
 
     # --- Claude / Anthropic (narrative web search + structured prediction) ---
-    # Cost-tuned defaults: Sonnet for the prediction (near-Opus quality at ~40%
-    # cheaper output) and Haiku for the web-search/summarize step (cheapest input).
+    # Cost-tuned: Sonnet for both. Search must be Sonnet (not Haiku) — Haiku can't
+    # use the web-search tool with a `max_uses` cap (programmatic tool calling); the
+    # cap (not the model) is what keeps the search cost down.
     anthropic_api_key: str = Field(default="", description="Anthropic API key.")
     predict_model_id: str = Field(default="claude-sonnet-4-6", description="Reasoning model.")
-    format_model_id: str = Field(default="claude-haiku-4-5", description="Search/summarize model.")
+    format_model_id: str = Field(default="claude-sonnet-4-6", description="Search/summarize model.")
 
     # --- Sports data providers (authoritative fixtures + results). Use BOTH, free-first. ---
     football_data_api_key: str = Field(default="", description="football-data.org token (free).")
