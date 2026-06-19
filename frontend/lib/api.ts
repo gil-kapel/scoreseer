@@ -112,6 +112,17 @@ export type DashboardMetrics = {
   trend: TrendPoint[];
 };
 
+export type EstimatorStats = {
+  estimator: string;
+  n_graded: number;
+  outcome_accuracy: number;
+  exact_rate: number;
+  goals_mae: number;
+  confidence_brier: number;
+  total_points: number;
+  max_points: number;
+};
+
 export type ReliabilityBin = { bucket: string; avg_confidence: number; accuracy: number; n: number };
 export type CalibrationVersion = {
   version: number;
@@ -175,6 +186,7 @@ export const api = {
   // Slow-changing reads — cached ~45s (ISR).
   upcoming: (windowH = 336) => get<FixtureRead[]>(`/api/fixtures/upcoming?window_h=${windowH}`),
   metrics: () => get<DashboardMetrics>(`/api/dashboard/metrics`),
+  estimators: () => get<EstimatorStats[]>(`/api/dashboard/estimators`),
   calibration: () => get<CalibrationView>(`/api/dashboard/calibration`),
   history: (qs: string) => get<HistoryRow[]>(`/api/history${qs ? `?${qs}` : ""}`),
   // Live reads — never cached (run status, in-flight prediction indicator).

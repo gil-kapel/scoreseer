@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, CalendarClock, History, Settings2 } from "lucide-react";
+import { BarChart3, CalendarClock, History, Settings2, Swords } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +9,7 @@ import { cn } from "@/lib/cn";
 const NAV = [
   { href: "/", label: "Upcoming", Icon: CalendarClock },
   { href: "/dashboard", label: "Dashboard", Icon: BarChart3 },
+  { href: "/estimators", label: "Estimators", Icon: Swords },
   { href: "/history", label: "History", Icon: History },
   { href: "/admin/runs", label: "Admin", Icon: Settings2 },
 ];
