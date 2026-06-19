@@ -1,0 +1,28 @@
+# Render Blueprint — ScoreSeer backend (FastAPI) on the free tier.
+# Render builds the root Dockerfile; the last stage (`prod`) is the default target.
+# Connect this repo on https://dashboard.render.com → "New +" → "Blueprint".
+# Postgres is NOT defined here — use a free Neon database and paste its URL into
+# DATABASE_URL (with the +asyncpg driver — see DEPLOY.md).
+services:
+  - type: web
+    name: scoreseer-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: SCHEDULER_ENABLED
+        value: "false" # no autonomous Claude spend
+      # Secrets — set these in the Render dashboard (sync:false keeps them out of git):
+      - key: DATABASE_URL # Neon URL, e.g. postgresql+asyncpg://user:pass@ep-xxx.neon.tech/scoreseer
+        sync: false
+      - key: API_TOKEN # MUST match the value set on Vercel
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false

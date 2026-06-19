@@ -1,0 +1,59 @@
+# ScoreSeer — production stack (single host). Bring your own .env (see .env.example).
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences vs dev: prod build targets, no debug ports, no source mounts,
+# auth on (API_TOKEN + BASIC_AUTH_*), only the frontend is published.
+services:
+  postgres:
+    image: postgres:16
+    container_name: scoreseer-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scoreseer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-scoreseer}
+    volumes:
+      - scoreseer_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scoreseer} -d ${POSTGRES_DB:-scoreseer}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      target: prod
+    container_name: scoreseer-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env                     # ANTHROPIC_API_KEY, FOOTBALL_DATA_API_KEY, API_TOKEN, ...
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-scoreseer}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-scoreseer}
+      ENVIRONMENT: production
+      SCHEDULER_ENABLED: "${SCHEDULER_ENABLED:-false}"  # keep false to avoid surprise Claude spend
+    expose:
+      - "8000"                   # internal only — reached by the frontend, not published
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+    container_name: scoreseer-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      API_BASE: http://backend:8000     # internal network — server-side fetch, no CORS
+      API_TOKEN: ${API_TOKEN:?set API_TOKEN in .env}            # injected on backend calls
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-}                     # owner-only UI gate
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-}
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "${WEB_PORT:-3000}:3000"  # the only published port — put a TLS proxy in front
+
+volumes:
+  scoreseer_pgdata:

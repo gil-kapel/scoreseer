@@ -1,0 +1,20 @@
+# Pings the backend's /health every ~10 min so Render's free tier never spins
+# down — otherwise a cold start (~30-50s) would time out the Vercel frontend's
+# first server-side fetch. Set repo variable BACKEND_HEALTH_URL once the backend
+# URL is known (Settings → Secrets and variables → Actions → Variables).
+name: keepalive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend /health
+        run: |
+          URL="${{ vars.BACKEND_HEALTH_URL || 'https://scoreseer-api.onrender.com/health' }}"
+          echo "pinging $URL"
+          curl -fsS --max-time 60 "$URL" && echo "ok" || echo "ping failed (backend cold/starting)"

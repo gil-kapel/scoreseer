@@ -1,0 +1,36 @@
+# Fly.io — ScoreSeer backend (FastAPI). Deploys the lean `prod` stage of the
+# root Dockerfile straight from local source (no GitHub needed).
+#   fly launch --no-deploy --copy-config --name scoreseer-api   # claim the app name
+#   fly postgres create --name scoreseer-db                     # managed Postgres
+#   fly postgres attach scoreseer-db                            # sets DATABASE_URL secret
+#   fly secrets set DATABASE_URL="postgresql+asyncpg://..."     # asyncpg driver (see DEPLOY.md)
+#   fly secrets set ANTHROPIC_API_KEY=... FOOTBALL_DATA_API_KEY=... API_TOKEN=...
+#   fly deploy
+app = "scoreseer-api"          # change if the name is taken
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+  build-target = "prod"        # multi-stage: lean uvicorn image, no debugpy
+
+[env]
+  ENVIRONMENT = "production"
+  SCHEDULER_ENABLED = "false"  # no autonomous Claude spend
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"   # keep 1 machine warm: in-process scheduler + predict state
+  auto_start_machines = true
+  min_machines_running = 1     # single process only — never scale past 1
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: scoreseer-postgres
+    environment:
+      POSTGRES_USER: scoreseer
+      POSTGRES_PASSWORD: scoreseer
+      POSTGRES_DB: scoreseer
+    ports:
+      - "5433:5432"   # 5433 on host to avoid clashing with a local Postgres on 5432
+    volumes:
+      - scoreseer_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scoreseer -d scoreseer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      target: dev
+    container_name: scoreseer-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env                     # ANTHROPIC_API_KEY, FOOTBALL_DATA_API_KEY, ...
+    environment:
+      # Inside the compose network Postgres is reachable as `postgres:5432`
+      # (overrides the host 127.0.0.1:5433 value from .env).
+      DATABASE_URL: postgresql+asyncpg://scoreseer:scoreseer@postgres:5432/scoreseer
+      ENVIRONMENT: development
+      # Scheduler is OFF by default so the container never makes autonomous Claude
+      # calls. Set to "true" to enable scheduled predict/grade runs.
+      SCHEDULER_ENABLED: "false"
+    ports:
+      - "8000:8000"   # API
+      - "5678:5678"   # debugpy — attach from Cursor (see .vscode/launch.json)
+    volumes:
+      - ./backend:/app/backend   # live source for the debugger + quick edits
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    container_name: scoreseer-frontend
+    depends_on:
+      - backend
+    environment:
+      API_BASE: http://backend:8000   # internal network — server-side fetch, no CORS
+      NODE_OPTIONS: "--inspect=0.0.0.0:9229"
+      NEXT_TELEMETRY_DISABLED: "1"
+      WATCHPACK_POLLING: "true"        # reliable file-watching in Docker on macOS
+    ports:
+      - "3000:3000"   # web app
+      - "9229:9229"   # node inspector — attach from Cursor
+    volumes:
+      - ./frontend:/app          # live source
+      - /app/node_modules        # keep the image's installed deps
+
+volumes:
+  scoreseer_pgdata:

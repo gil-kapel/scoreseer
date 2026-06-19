@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ScoreSeer — How the Accuracy Lab Works</title>
+<meta name="description" content="The business logic of ScoreSeer: a self-grading, self-calibrating World Cup 2026 match-result estimator." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2315181f'/%3E%3Ccircle cx='16' cy='16' r='10.5' stroke='%2338a6f0' stroke-width='1.6' opacity='.55'/%3E%3Ccircle cx='16' cy='16' r='6.2' stroke='%2338a6f0' stroke-width='1.6'/%3E%3Cg stroke='%2338a6f0' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M16 2.5v4'/%3E%3Cpath d='M16 25.5v4'/%3E%3Cpath d='M2.5 16h4'/%3E%3Cpath d='M25.5 16h4'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%233ad07e'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* ScoreSeer — analyst-dark palette, mirrored from frontend/app/globals.css */
+  :root {
+    --bg:        oklch(0.17 0.01 250);
+    --bg-2:      oklch(0.15 0.012 250);
+    --surface:   oklch(0.21 0.012 250);
+    --surface-2: oklch(0.25 0.014 250);
+    --border:    oklch(0.30 0.012 250);
+    --fg:        oklch(0.96 0.01 250);
+    --fg-muted:  oklch(0.72 0.012 250);
+    --fg-dim:    oklch(0.58 0.012 250);
+    --primary:   oklch(0.70 0.16 230);
+    --success:   oklch(0.74 0.17 150);
+    --danger:    oklch(0.66 0.20 25);
+    --warning:   oklch(0.80 0.15 85);
+    --info:      oklch(0.72 0.13 230);
+    --radius: 16px;
+    --maxw: 1120px;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  /* ambient glow field */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 78% -8%, oklch(0.70 0.16 230 / 0.16), transparent 60%),
+      radial-gradient(50rem 36rem at -6% 14%, oklch(0.74 0.17 150 / 0.10), transparent 55%),
+      radial-gradient(46rem 36rem at 50% 116%, oklch(0.80 0.15 85 / 0.07), transparent 60%);
+  }
+
+  a { color: inherit; text-decoration: none; }
+  h1, h2, h3 { line-height: 1.15; margin: 0; letter-spacing: -0.02em; }
+  .nums { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .wrap { width: min(100% - 2.5rem, var(--maxw)); margin-inline: auto; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(14px) saturate(140%);
+    background: oklch(0.17 0.01 250 / 0.72);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-in { display: flex; align-items: center; gap: 1.4rem; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 800; letter-spacing: -0.03em; font-size: 1.05rem; }
+  .brand svg { width: 26px; height: 26px; display: block; }
+  .nav-links { margin-left: auto; display: flex; gap: 1.4rem; font-size: 0.86rem; color: var(--fg-muted); font-weight: 500; }
+  .nav-links a { transition: color .2s; }
+  .nav-links a:hover { color: var(--fg); }
+  @media (max-width: 760px) { .nav-links { display: none; } }
+
+  /* ---------- hero ---------- */
+  header.hero { padding: 6rem 0 4rem; position: relative; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--primary);
+    border: 1px solid oklch(0.70 0.16 230 / 0.35);
+    background: oklch(0.70 0.16 230 / 0.08);
+    padding: 0.4rem 0.8rem; border-radius: 999px;
+  }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 0 oklch(0.74 0.17 150 / 0.6); animation: pulse 2.4s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 oklch(0.74 0.17 150 / 0.6);} 70% { box-shadow: 0 0 0 10px oklch(0.74 0.17 150 / 0);} 100% { box-shadow: 0 0 0 0 oklch(0.74 0.17 150 / 0);} }
+
+  .hero h1 {
+    font-size: clamp(2.6rem, 6.5vw, 4.6rem); font-weight: 800; margin: 1.4rem 0 0;
+    background: linear-gradient(180deg, var(--fg), oklch(0.78 0.04 250));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .lede { font-size: clamp(1.05rem, 2vw, 1.3rem); color: var(--fg-muted); max-width: 56ch; margin: 1.3rem 0 0; }
+  .hero .lede b { color: var(--fg); font-weight: 600; }
+  .northstar {
+    margin-top: 2rem; padding: 1.1rem 1.3rem; border-radius: 14px;
+    border: 1px solid var(--border); background: linear-gradient(180deg, var(--surface), var(--bg-2));
+    max-width: 60ch; display: flex; gap: 0.9rem; align-items: flex-start;
+  }
+  .northstar .star { font-size: 1.3rem; line-height: 1.4; }
+  .northstar p { margin: 0; font-size: 0.95rem; color: var(--fg-muted); }
+  .northstar b { color: var(--fg); }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 3rem; }
+  @media (max-width: 760px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat {
+    border: 1px solid var(--border); border-radius: 14px; padding: 1.2rem 1.1rem;
+    background: linear-gradient(180deg, var(--surface), var(--bg-2));
+  }
+  .stat .v { font-family: var(--mono); font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .k { font-size: 0.8rem; color: var(--fg-muted); margin-top: 0.2rem; }
+  .stat.b .v { color: var(--primary); } .stat.g .v { color: var(--success); }
+  .stat.a .v { color: var(--warning); } .stat.i .v { color: var(--info); }
+
+  /* ---------- sections ---------- */
+  section { padding: 4.5rem 0; }
+  .sec-head { max-width: 60ch; margin-bottom: 2.6rem; }
+  .sec-head .tag { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--primary); }
+  .sec-head h2 { font-size: clamp(1.7rem, 3.6vw, 2.5rem); font-weight: 700; margin-top: 0.7rem; }
+  .sec-head p { color: var(--fg-muted); margin: 0.9rem 0 0; font-size: 1.02rem; }
+
+  .card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--surface), var(--bg-2));
+    padding: 1.5rem;
+  }
+
+  /* ---------- the loop ---------- */
+  .loop { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 0.4rem; }
+  @media (max-width: 860px) { .loop { grid-template-columns: 1fr; } .loop .arrow { transform: rotate(90deg); height: 2.4rem; } }
+  .loop-node { position: relative; border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; background: linear-gradient(180deg, var(--surface), var(--bg-2)); overflow: hidden; }
+  .loop-node::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; }
+  .loop-node.predict::before { background: var(--primary); }
+  .loop-node.grade::before { background: var(--success); }
+  .loop-node.calibrate::before { background: var(--warning); }
+  .loop-node .ico { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; margin-bottom: 0.9rem; }
+  .loop-node.predict .ico { background: oklch(0.70 0.16 230 / 0.16); color: var(--primary); }
+  .loop-node.grade .ico { background: oklch(0.74 0.17 150 / 0.16); color: var(--success); }
+  .loop-node.calibrate .ico { background: oklch(0.80 0.15 85 / 0.16); color: var(--warning); }
+  .loop-node h3 { font-size: 1.15rem; }
+  .loop-node .phase { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-dim); }
+  .loop-node p { color: var(--fg-muted); font-size: 0.92rem; margin: 0.5rem 0 0; }
+  .arrow { display: grid; place-items: center; color: var(--fg-dim); }
+  .arrow svg { width: 28px; height: 28px; }
+  .loop-back {
+    margin-top: 1rem; text-align: center; font-family: var(--mono); font-size: 0.8rem;
+    color: var(--fg-muted);
+  }
+  .loop-back b { color: var(--warning); }
+
+  /* ---------- two-column flows ---------- */
+  .flows { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; }
+  @media (max-width: 860px) { .flows { grid-template-columns: 1fr; } }
+  .flow-title { display: flex; align-items: center; gap: 0.7rem; font-weight: 700; font-size: 1.1rem; margin-bottom: 1.2rem; }
+  .flow-title .pill { font-family: var(--mono); font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 6px; }
+  .flow-title.pre .pill { background: oklch(0.70 0.16 230 / 0.16); color: var(--primary); }
+  .flow-title.post .pill { background: oklch(0.74 0.17 150 / 0.16); color: var(--success); }
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.85rem; }
+  ol.steps li { counter-increment: s; position: relative; padding-left: 2.6rem; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: -1px;
+    width: 1.8rem; height: 1.8rem; border-radius: 8px; display: grid; place-items: center;
+    font-family: var(--mono); font-size: 0.8rem; font-weight: 700;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--fg-muted);
+  }
+  .flows .pre ol.steps li::before { color: var(--primary); border-color: oklch(0.70 0.16 230 / 0.4); }
+  .flows .post ol.steps li::before { color: var(--success); border-color: oklch(0.74 0.17 150 / 0.4); }
+  ol.steps b { color: var(--fg); font-weight: 600; }
+  ol.steps span { color: var(--fg-muted); font-size: 0.93rem; }
+
+  /* ---------- code / schema ---------- */
+  .schema { font-family: var(--mono); font-size: 0.86rem; line-height: 1.75; overflow-x: auto; }
+  .schema .ln { color: var(--fg-dim); }
+  .k1 { color: var(--primary); } .k2 { color: var(--warning); } .k3 { color: var(--success); } .cm { color: var(--fg-dim); font-style: italic; }
+  .split { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1.4rem; align-items: start; }
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+  /* ---------- generic card grid ---------- */
+  .grid { display: grid; gap: 1.1rem; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 860px) { .g3, .g4 { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 540px) { .g3, .g4 { grid-template-columns: 1fr; } }
+  .mini h3 { font-size: 1rem; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.5rem; }
+  .mini p { margin: 0; color: var(--fg-muted); font-size: 0.9rem; }
+  .mini .badge { font-family: var(--mono); font-size: 0.66rem; padding: 0.12rem 0.45rem; border-radius: 5px; background: var(--surface-2); color: var(--fg-muted); border: 1px solid var(--border); }
+
+  /* ---------- scoring table ---------- */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 0.92rem; overflow: hidden; border-radius: var(--radius); }
+  .tbl thead th { text-align: left; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-muted); padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); }
+  .tbl td { padding: 0.8rem 1rem; border-bottom: 1px solid oklch(0.30 0.012 250 / 0.5); }
+  .tbl tbody tr:hover { background: oklch(0.70 0.16 230 / 0.05); }
+  .tbl .stage { font-weight: 600; }
+  .tbl .nums { color: var(--fg); }
+  .tbl .out { color: var(--info); } .tbl .ex { color: var(--success); font-weight: 700; }
+  .tbl tr.final td { background: oklch(0.80 0.15 85 / 0.06); }
+  .tbl tr.final .stage { color: var(--warning); }
+  .scoring-note { font-size: 0.86rem; color: var(--fg-muted); margin-top: 1rem; display: flex; gap: 0.6rem; align-items: flex-start; }
+
+  /* ---------- entities (data model) ---------- */
+  .ent { padding: 1.1rem 1.2rem; }
+  .ent h3 { font-family: var(--mono); font-size: 0.9rem; color: var(--fg); display: flex; align-items: center; gap: 0.5rem; }
+  .ent .tagchip { font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.1rem 0.4rem; border-radius: 4px; }
+  .tagchip.ap { background: oklch(0.74 0.17 150 / 0.16); color: var(--success); }
+  .tagchip.au { background: oklch(0.70 0.16 230 / 0.16); color: var(--primary); }
+  .ent p { margin: 0.55rem 0 0; font-size: 0.85rem; color: var(--fg-muted); }
+  .ent .fields { margin-top: 0.6rem; font-family: var(--mono); font-size: 0.74rem; color: var(--fg-dim); line-height: 1.7; }
+
+  /* ---------- architecture layers ---------- */
+  .layers { display: flex; flex-direction: column; gap: 0.7rem; }
+  .layer { border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.2rem; background: var(--surface); display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .layer .lbl { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-dim); width: 120px; flex-shrink: 0; }
+  .layer .chips { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .chip { font-family: var(--mono); font-size: 0.78rem; padding: 0.35rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--fg-muted); }
+  .layer.route .chip { border-color: oklch(0.72 0.13 230 / 0.4); color: var(--info); }
+  .layer.service .chip { border-color: oklch(0.70 0.16 230 / 0.4); color: var(--primary); }
+  .layer.repo .chip { border-color: oklch(0.74 0.17 150 / 0.4); color: var(--success); }
+  .layer.provider .chip { border-color: oklch(0.80 0.15 85 / 0.4); color: var(--warning); }
+  .arrow-down { text-align: center; color: var(--fg-dim); font-family: var(--mono); font-size: 0.8rem; }
+
+  /* ---------- metrics targets ---------- */
+  .targets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.1rem; }
+  @media (max-width: 860px) { .targets { grid-template-columns: 1fr; } }
+  .target { padding: 1.6rem; position: relative; overflow: hidden; }
+  .target .big { font-family: var(--mono); font-size: 2.6rem; font-weight: 700; letter-spacing: -0.03em; }
+  .target.b .big { color: var(--primary); } .target.g .big { color: var(--success); } .target.a .big { color: var(--warning); }
+  .target .lbl { font-weight: 600; margin-top: 0.3rem; }
+  .target .desc { color: var(--fg-muted); font-size: 0.88rem; margin-top: 0.4rem; }
+
+  /* ---------- stack ---------- */
+  .stack { display: flex; flex-wrap: wrap; gap: 0.7rem; }
+  .stack .chip { font-size: 0.85rem; padding: 0.5rem 0.9rem; transition: transform .15s, border-color .15s; }
+  .stack .chip:hover { transform: translateY(-2px); border-color: var(--primary); color: var(--fg); }
+
+  /* ---------- footer ---------- */
+  footer { border-top: 1px solid var(--border); padding: 3rem 0 4rem; color: var(--fg-muted); }
+  footer .ft-grid { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.2rem; }
+  footer .docs { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.88rem; }
+  footer .docs a { color: var(--fg-muted); border-bottom: 1px solid transparent; transition: .2s; }
+  footer .docs a:hover { color: var(--primary); border-color: var(--primary); }
+
+  /* ---------- reveal animation ---------- */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } .eyebrow .dot { animation: none; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<!-- ░░ NAV ░░ -->
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#15181f"/><circle cx="16" cy="16" r="10.5" stroke="#38a6f0" stroke-width="1.6" opacity=".55"/><circle cx="16" cy="16" r="6.2" stroke="#38a6f0" stroke-width="1.6"/><g stroke="#38a6f0" stroke-width="1.6" stroke-linecap="round"><path d="M16 2.5v4"/><path d="M16 25.5v4"/><path d="M2.5 16h4"/><path d="M25.5 16h4"/></g><circle cx="16" cy="16" r="2.6" fill="#3ad07e"/></svg>
+      ScoreSeer
+    </a>
+    <div class="nav-links">
+      <a href="#loop">The Loop</a>
+      <a href="#flows">Flows</a>
+      <a href="#prediction">Prediction</a>
+      <a href="#scoring">Scoring</a>
+      <a href="#data">Data Model</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#targets">Targets</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ░░ HERO ░░ -->
+<header class="hero" id="top">
+  <div class="wrap">
+    <span class="eyebrow reveal"><span class="dot"></span> Personal accuracy lab · FIFA World Cup 2026</span>
+    <h1 class="reveal">Predict the score.<br/>Grade itself. Get better.</h1>
+    <p class="lede reveal">ScoreSeer automatically predicts every World Cup 2026 fixture — <b>exact final score, likely scorers, and the reasoning</b> — then grades each prediction against the real result and <b>calibrates its own biases</b> over the tournament.</p>
+
+    <div class="northstar reveal">
+      <span class="star">★</span>
+      <p>The north star is <b>not "win bets."</b> It is <b>measurable, improving prediction accuracy across the tournament</b>, with full reproducibility of <i>why</i> every prediction was made.</p>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat b reveal"><div class="v" data-count="104" data-suffix="">0</div><div class="k">WC2026 fixtures tracked</div></div>
+      <div class="stat g reveal"><div class="v" data-count="55" data-suffix="%">0</div><div class="k">Outcome-accuracy target</div></div>
+      <div class="stat a reveal"><div class="v" data-count="12" data-suffix="%">0</div><div class="k">Exact-score-hit target</div></div>
+      <div class="stat i reveal"><div class="v">1</div><div class="k">Owner — no betting, ever</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- ░░ THE LOOP ░░ -->
+<section id="loop">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">The core engine</div>
+      <h2>A self-improving feedback loop</h2>
+      <p>Most casual prediction has no feedback: you guess, the match happens, you never learn whether your reasoning was sound. ScoreSeer closes that loop. The real "actor" is a <b>scheduler</b> — the human mostly observes.</p>
+    </div>
+
+    <div class="loop reveal">
+      <div class="loop-node predict">
+        <div class="ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/></svg>
+        </div>
+        <div class="phase">Before kickoff</div>
+        <h3>1 · Predict</h3>
+        <p>Fetch fresh pre-match context, inject what the system has learned, and commit to a strict structured prediction.</p>
+      </div>
+
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+
+      <div class="loop-node grade">
+        <div class="ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </div>
+        <div class="phase">After full-time</div>
+        <h3>2 · Grade</h3>
+        <p>Pull the authoritative result, compare against the prediction, and persist a falsifiable, honest grade.</p>
+      </div>
+
+      <div class="arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+
+      <div class="loop-node calibrate">
+        <div class="ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+        </div>
+        <div class="phase">Rolling history</div>
+        <h3>3 · Calibrate</h3>
+        <p>Recompute observed biases from every grade into a compact snippet that shapes the next round of predictions.</p>
+      </div>
+    </div>
+    <div class="loop-back reveal">↻ &nbsp;Calibration feeds straight back into step 1 — <b>every graded match makes the next prediction smarter.</b></div>
+  </div>
+</section>
+
+<!-- ░░ FLOWS ░░ -->
+<section id="flows" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">Per-fixture lifecycle</div>
+      <h2>Two flows run for every match</h2>
+      <p>Each fixture moves through a prediction flow before kickoff and a grading flow after the whistle. A failure on one fixture never aborts the batch — failures are isolated, logged, and made visible, never silently dropped.</p>
+    </div>
+
+    <div class="flows reveal">
+      <div class="card pre">
+        <div class="flow-title pre"><span class="pill">A</span> Prediction flow · before kickoff</div>
+        <ol class="steps">
+          <li><b>Select</b> <span>— the scheduler wakes on a cadence and picks fixtures kicking off inside the prediction window that have no current prediction.</span></li>
+          <li><b>Fetch context</b> <span>— Claude web search gathers form, lineups, injuries, head-to-head, stakes, venue → stored as an immutable DataSnapshot with source citations.</span></li>
+          <li><b>Inject calibration</b> <span>— the current CalibrationProfile (the system's known biases) is folded into the prompt context.</span></li>
+          <li><b>Predict</b> <span>— the LLM returns a schema-validated prediction: score, scorers + likelihoods, confidence, explanation.</span></li>
+          <li><b>Store &amp; show</b> <span>— linked to its snapshot + model/prompt/calibration version, it appears under "Upcoming."</span></li>
+          <li><b>Repair or flag</b> <span>— bad schema → retry with a repair prompt; thin data → low-confidence note; exhausted → a visible "prediction failed" state.</span></li>
+        </ol>
+      </div>
+
+      <div class="card post">
+        <div class="flow-title post"><span class="pill">B</span> Grading flow · after full-time</div>
+        <ol class="steps">
+          <li><b>Detect finish</b> <span>— the scheduler notices a predicted match has reached full-time.</span></li>
+          <li><b>Fetch result</b> <span>— the authoritative score &amp; goalscorers come from a structured sports API, saved as a Result.</span></li>
+          <li><b>Grade</b> <span>— compare prediction vs reality: exact hit, outcome, goals error, scorer precision/recall + Brier, confidence Brier.</span></li>
+          <li><b>Calibrate</b> <span>— recompute the CalibrationProfile from rolling grade history; its version increments.</span></li>
+          <li><b>Handle edges</b> <span>— postponed/abandoned → <b>void</b> (excluded from metrics); ET/penalties → exact-score graded on the 90' line, advancing team tracked separately.</span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ PREDICTION OUTPUT ░░ -->
+<section id="prediction" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">The contract</div>
+      <h2>A falsifiable, structured prediction</h2>
+      <p>Generic "predict this match" prompts hallucinate, cite nothing, and never learn. ScoreSeer instead forces the model into a strict schema — validated at the boundary, repaired on failure — so every prediction is concrete enough to be graded.</p>
+    </div>
+
+    <div class="split">
+      <div class="card reveal">
+        <div class="schema">
+<span class="cm"># PredictionOutput — enforced via tool-use / structured output</span>
+<span class="k1">home_score</span>: int            <span class="cm">≥ 0</span>
+<span class="k1">away_score</span>: int            <span class="cm">≥ 0</span>
+<span class="k1">scorers</span>: [
+  { <span class="k2">player_name</span>: str,
+    <span class="k2">team</span>: "home" | "away",
+    <span class="k2">likelihood</span>: float    <span class="cm"># 0 .. 1</span> }
+]
+<span class="k1">match_confidence</span>: float     <span class="cm"># 0 .. 1</span>
+<span class="k1">advancing_team</span>: "home"|"away"  <span class="cm"># knockouts only</span>
+<span class="k1">explanation</span>: str           <span class="cm"># cites the key signals</span>
+        </div>
+      </div>
+      <div class="grid" style="gap:1rem;">
+        <div class="card mini reveal"><h3>🔒 Schema-enforced</h3><p>The model must satisfy the schema; invalid output triggers a capped repair-retry loop. After N failures the prediction is recorded as <b>failed</b> — never dropped.</p></div>
+        <div class="card mini reveal"><h3>🧾 Fully reproducible</h3><p>Every prediction stores its snapshot, model id, and prompt / schema / calibration version. You can reconstruct exactly why it was made — append-only, never overwritten.</p></div>
+        <div class="card mini reveal"><h3>🎯 Stage-aware</h3><p>Group predictions may be draws; knockout predictions represent the 90-minute scoreline <em>and</em> name the advancing team.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ GRADING METRICS ░░ -->
+<section id="grading">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">Honest self-scoring</div>
+      <h2>How a prediction is graded</h2>
+      <p>The grading core is a set of pure, deterministic functions — no database, no network, no LLM — so correctness is exhaustively unit-tested. Score-level metrics always use the <b>90-minute</b> line; own goals are excluded from the scorer set but still count toward total goals.</p>
+    </div>
+    <div class="grid g3 reveal">
+      <div class="card mini"><h3>✅ Exact hit <span class="badge">bool</span></h3><p>Did the predicted scoreline equal the real 90' scoreline, exactly?</p></div>
+      <div class="card mini"><h3>↔ Outcome correct <span class="badge">1 / X / 2</span></h3><p>Did we get the direction — home win, draw, or away win — right?</p></div>
+      <div class="card mini"><h3>± Goals abs. error <span class="badge">int</span></h3><p>Absolute difference between predicted and actual total goals.</p></div>
+      <div class="card mini"><h3>🎯 Scorer precision &amp; recall <span class="badge">0–1</span></h3><p>Of the scorers we named, how many scored — and of those who scored, how many did we name (accent-insensitive matching).</p></div>
+      <div class="card mini"><h3>📉 Scorer Brier <span class="badge">0–1</span></h3><p>Mean squared error of each named scorer's likelihood vs whether they actually scored.</p></div>
+      <div class="card mini"><h3>📊 Confidence Brier <span class="badge">0–1</span></h3><p>Squared error of <code>match_confidence</code> against whether the predicted outcome occurred — the calibration signal.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ SCORING LEAGUE ░░ -->
+<section id="scoring" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">Prediction league</div>
+      <h2>Stage-weighted points</h2>
+      <p>Beyond raw metrics, ScoreSeer keeps a headline "score" — points per match, weighted by how much each stage matters. Scoring is <b>tiered</b>: an exact scoreline earns the higher exact points; a correct outcome alone earns the outcome points; otherwise zero. Exact does <em>not</em> also add the outcome points.</p>
+    </div>
+    <div class="card reveal" style="padding:0; overflow:hidden;">
+      <table class="tbl">
+        <thead><tr><th>Stage</th><th>Correct outcome</th><th>Exact scoreline</th></tr></thead>
+        <tbody>
+          <tr><td class="stage">Group</td><td class="nums out">1</td><td class="nums ex">3</td></tr>
+          <tr><td class="stage">Round of 32</td><td class="nums out">2</td><td class="nums ex">5</td></tr>
+          <tr><td class="stage">Round of 16</td><td class="nums out">2</td><td class="nums ex">5</td></tr>
+          <tr><td class="stage">Quarter-final</td><td class="nums out">4</td><td class="nums ex">8</td></tr>
+          <tr><td class="stage">Semi-final</td><td class="nums out">5</td><td class="nums ex">10</td></tr>
+          <tr><td class="stage">Third place</td><td class="nums out">5</td><td class="nums ex">10</td></tr>
+          <tr class="final"><td class="stage">Final</td><td class="nums out">8</td><td class="nums ex">15</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="scoring-note reveal"><span>ℹ️</span><span>Later rounds are worth more, so the system is rewarded for being right when the stakes are highest. The sum across all graded matches is the estimator's headline tournament score.</span></div>
+  </div>
+</section>
+
+<!-- ░░ CALIBRATION ░░ -->
+<section id="calibration">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <div class="sec-head" style="margin-bottom:1.4rem;">
+          <div class="tag">The "learning"</div>
+          <h2>Calibration without a trained model</h2>
+        </div>
+        <p style="color:var(--fg-muted);">After each grading run, the system aggregates <b>every graded prediction</b> into observed biases and folds a compact <code>prompt_snippet</code> into future prompts. There is no Poisson or ML model in the MVP — calibration is purely prompt-level, and deliberately isolated so it can be evaluated and swapped later if the signal proves weak.</p>
+        <p style="color:var(--fg-muted);">It needs a minimum of <b>5 graded matches</b> before it trusts the signal enough to calibrate at all.</p>
+      </div>
+      <div class="grid reveal" style="gap:1rem;">
+        <div class="card mini"><h3 style="color:var(--primary)">⚖ Score bias</h3><p>Mean over/under-prediction of home &amp; away goals — e.g. "you over-predict favourite blowouts by ~0.4 goals."</p></div>
+        <div class="card mini"><h3 style="color:var(--warning)">🔥 Overconfidence</h3><p>Mean stated confidence minus realized outcome accuracy — is the system more sure than it should be?</p></div>
+        <div class="card mini"><h3 style="color:var(--success)">📈 Trend</h3><p>Confidence Brier in the tournament's second half vs the first — direct evidence the loop is working.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ DATA MODEL ░░ -->
+<section id="data" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">Append-only &amp; auditable</div>
+      <h2>The data model</h2>
+      <p>Postgres, UUID keys, UTC timestamps, JSONB for flexible payloads. This is a <b>correctness &amp; reproducibility</b> problem, not a throughput one — predictions, snapshots, and grades are never mutated; re-runs create new versioned rows.</p>
+    </div>
+    <div class="grid g3 reveal">
+      <div class="card ent"><h3>Fixture</h3><p>One WC2026 match, synced from the structured fixtures API.</p><div class="fields">stage · group · home/away · kickoff_utc · venue · status</div></div>
+      <div class="card ent"><h3>DataSnapshot <span class="tagchip ap">append-only</span></h3><p>Immutable narrative evidence the model saw for a prediction.</p><div class="fields">evidence · sources[] · search_queries · data_quality</div></div>
+      <div class="card ent"><h3>Prediction <span class="tagchip au">versioned</span></h3><p>The structured forecast + full provenance.</p><div class="fields">score · scorers[] · confidence · explanation · model/prompt/calibration version</div></div>
+      <div class="card ent"><h3>Result</h3><p>Authoritative score &amp; scorers from the sports API.</p><div class="fields">home/away_score_90 · ft_outcome · decided_by · status</div></div>
+      <div class="card ent"><h3>Grade <span class="tagchip ap">append-only</span></h3><p>One per prediction — the full scorecard.</p><div class="fields">exact_hit · outcome_correct · goals_error · scorer P/R · briers</div></div>
+      <div class="card ent"><h3>CalibrationProfile <span class="tagchip ap">versioned</span></h3><p>A snapshot of "what we've learned" so far.</p><div class="fields">version · metric_aggregates · bias_summary · prompt_snippet</div></div>
+      <div class="card ent"><h3>Run + RunItem</h3><p>One scheduler/manual invocation and its per-fixture outcomes — failures isolated here.</p><div class="fields">type · trigger · status · totals · per-fixture detail</div></div>
+      <div class="card ent"><h3>Team · Player</h3><p>Squad reference used to validate predicted goalscorers.</p><div class="fields">fifa_code · name · group · position</div></div>
+      <div class="card ent"><h3>Config</h3><p>Singleton — the knobs that bound a run.</p><div class="fields">window_hours · cadence · fixture_cap · spend_cap</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ ARCHITECTURE ░░ -->
+<section id="architecture">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">Ports &amp; adapters</div>
+      <h2>Clean boundaries, swappable edges</h2>
+      <p>The call chain is strictly <b>Route → Service → Repository</b> (max two hops). Every external dependency sits behind a protocol, so the structured-vs-web-search ground-truth question is a one-adapter swap, and tests inject fakes.</p>
+    </div>
+    <div class="layers reveal">
+      <div class="layer route"><span class="lbl">Routes</span><div class="chips"><span class="chip">/fixtures</span><span class="chip">/matches</span><span class="chip">/history</span><span class="chip">/dashboard</span><span class="chip">/admin/runs</span><span class="chip">/health</span></div></div>
+      <div class="arrow-down">↓</div>
+      <div class="layer service"><span class="lbl">Services</span><div class="chips"><span class="chip">PredictionService</span><span class="chip">GradingService</span><span class="chip">CalibrationService</span><span class="chip">FixtureSyncService</span><span class="chip">RunService (façade)</span></div></div>
+      <div class="arrow-down">↓</div>
+      <div class="layer repo"><span class="lbl">Repositories</span><div class="chips"><span class="chip">fixtures</span><span class="chip">predictions</span><span class="chip">results</span><span class="chip">grades</span><span class="chip">calibration</span><span class="chip">runs</span></div></div>
+      <div class="arrow-down">↓ &nbsp;ports &nbsp;↓</div>
+      <div class="layer provider"><span class="lbl">Providers</span><div class="chips"><span class="chip">FixturesProvider · sports API</span><span class="chip">ResultsProvider · sports API</span><span class="chip">NarrativeProvider · Claude web search</span><span class="chip">PredictionModel · Claude structured output</span></div></div>
+    </div>
+    <div class="grid g3 reveal" style="margin-top:1.4rem;">
+      <div class="card mini"><h3>🗓 Scheduler</h3><p>APScheduler runs in-process with a persistent job store — <code>max_instances=1</code>, coalescing, plus a Postgres advisory lock so a manual trigger can't race the scheduled run.</p></div>
+      <div class="card mini"><h3>🔁 Idempotent</h3><p>A unique key on <code>(fixture, prompt, model, calibration)</code> makes re-runs a no-op; grades are unique per prediction. Re-running is always safe.</p></div>
+      <div class="card mini"><h3>🛟 Resilient</h3><p>Each fixture runs in its own transaction; one failure writes a failed RunItem and the batch continues — ending "partial," never aborted.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ TARGETS ░░ -->
+<section id="targets">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">Steering, not guarantees</div>
+      <h2>What "good" looks like</h2>
+      <p>Exact-score prediction is intrinsically low-hit-rate, so the headline signal is <b>outcome accuracy + a calibration trend</b>, not exact-score hits. These are targets to steer by, measured across all graded WC2026 matches.</p>
+    </div>
+    <div class="targets reveal">
+      <div class="card target g"><div class="big" data-count="55" data-suffix="%">0</div><div class="lbl">Outcome accuracy</div><div class="desc">≥ 55% of matches' result direction (1/X/2) predicted correctly by tournament's end.</div></div>
+      <div class="card target b"><div class="big" data-count="12" data-suffix="%">0</div><div class="lbl">Exact-score hit rate</div><div class="desc">≥ 12% of exact 90' scorelines correct — vs ~5–8% for blind guessing.</div></div>
+      <div class="card target a"><div class="big" data-count="1.3" data-decimals="1" data-suffix="">0</div><div class="lbl">Total-goals MAE</div><div class="desc">Mean absolute error of total goals at or below 1.3.</div></div>
+    </div>
+    <div class="grid g3 reveal" style="margin-top:1.1rem;">
+      <div class="card mini"><h3>🎯 Scorer recall ≥ 35%</h3><p>Of players who actually scored, the fraction the system named — with per-player likelihoods tracked by Brier score.</p></div>
+      <div class="card mini"><h3>📐 Calibration improves</h3><p>Confidence Brier in the second half of the tournament beats the first — evidence the calibration loop earns its keep.</p></div>
+      <div class="card mini"><h3>⚙ ≥ 95% operational</h3><p>At least 95% of scheduled fixtures get a prediction before kickoff and a grade within 24h of full-time.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ STACK ░░ -->
+<section id="stack" style="padding-top:0;">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="tag">Built with</div>
+      <h2>The stack</h2>
+    </div>
+    <div class="stack reveal">
+      <span class="chip">Python 3.12</span>
+      <span class="chip">FastAPI</span>
+      <span class="chip">SQLModel</span>
+      <span class="chip">PostgreSQL</span>
+      <span class="chip">Alembic</span>
+      <span class="chip">APScheduler</span>
+      <span class="chip">Anthropic SDK</span>
+      <span class="chip">Claude web search</span>
+      <span class="chip">loguru</span>
+      <span class="chip">uv</span>
+      <span class="chip">Next.js 15</span>
+      <span class="chip">React 19</span>
+      <span class="chip">Tailwind v4</span>
+      <span class="chip">shadcn/ui</span>
+      <span class="chip">Docker Compose</span>
+    </div>
+  </div>
+</section>
+
+<!-- ░░ FOOTER ░░ -->
+<footer>
+  <div class="wrap ft-grid">
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true" style="width:24px;height:24px;"><rect width="32" height="32" rx="7" fill="#15181f"/><circle cx="16" cy="16" r="10.5" stroke="#38a6f0" stroke-width="1.6" opacity=".55"/><circle cx="16" cy="16" r="6.2" stroke="#38a6f0" stroke-width="1.6"/><g stroke="#38a6f0" stroke-width="1.6" stroke-linecap="round"><path d="M16 2.5v4"/><path d="M16 25.5v4"/><path d="M2.5 16h4"/><path d="M25.5 16h4"/></g><circle cx="16" cy="16" r="2.6" fill="#3ad07e"/></svg> ScoreSeer</div>
+    <div class="docs">
+      <a href="prd.md">PRD</a>
+      <a href="ux-flows.md">UX Flows</a>
+      <a href="ui-spec.md">UI Spec</a>
+      <a href="architecture.md">Architecture</a>
+      <a href="dev-plan.md">Dev Plan</a>
+    </div>
+  </div>
+  <div class="wrap" style="margin-top:1.4rem; font-size:0.82rem; color:var(--fg-dim);">A single-user accuracy lab · No wagering, ever · Reproducible by design.</div>
+</footer>
+
+<script>
+  // Reveal-on-scroll
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window)) { els.forEach(function (e) { e.classList.add('in'); }); return; }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+
+  // Count-up numbers
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var nums = document.querySelectorAll('[data-count]');
+    function run(el) {
+      var target = parseFloat(el.getAttribute('data-count'));
+      var decimals = parseInt(el.getAttribute('data-decimals') || '0', 10);
+      var suffix = el.getAttribute('data-suffix') || '';
+      if (reduce) { el.textContent = target.toFixed(decimals) + suffix; return; }
+      var start = null, dur = 1100;
+      function step(ts) {
+        if (start === null) start = ts;
+        var p = Math.min((ts - start) / dur, 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = (target * eased).toFixed(decimals) + suffix;
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+    if (!('IntersectionObserver' in window)) { nums.forEach(run); return; }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) { run(en.target); io.unobserve(en.target); } });
+    }, { threshold: 0.6 });
+    nums.forEach(function (e) { io.observe(e); });
+  })();
+</script>
+</body>
+</html>
