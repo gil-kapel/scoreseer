@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import logger
 from app.grading import metrics, scoring
-from app.models import Fixture, Grade, Prediction
+from app.models import Fixture, Grade, Prediction, Result
 from app.providers.base import ResultDTO, ResultsProvider
 from app.repositories import (
     GradeRepository,
@@ -54,21 +54,31 @@ class GradingService:
         if not ungraded:
             return {"status": "skipped"}
 
-        dto = await self.results.get_result(fixture.external_id)
-        if dto is None:
-            return {"status": "awaiting_result"}
+        # Prefer the already-stored result — grading shouldn't re-hit the external API
+        # for a match we already have (and keeps working if the provider key is
+        # missing/invalid). Only fetch from the provider for a genuinely new result.
+        stored = await self.result_repo.get(fixture_id)
+        if stored is not None and stored.status == "final":
+            metric_result = _stored_to_metric_result(stored, fixture)
+        else:
+            dto = await self.results.get_result(fixture.external_id)
+            if dto is None:
+                return {"status": "awaiting_result"}
+            values = result_dto_to_values(
+                dto, home_id=fixture.home_team_id, away_id=fixture.away_team_id
+            )
+            await self.result_repo.upsert(fixture_id=fixture_id, values=values)
+            metric_result = _to_metric_result(dto)
 
-        values = result_dto_to_values(
-            dto, home_id=fixture.home_team_id, away_id=fixture.away_team_id
-        )
-        await self.result_repo.upsert(fixture_id=fixture_id, values=values)
         for prediction in ungraded:
-            await self._grade(fixture, prediction, dto)
+            await self._grade(fixture, prediction, metric_result)
         await self.session.commit()
         return {"status": "graded", "n_graded": len(ungraded)}
 
-    async def _grade(self, fixture: Fixture, prediction: Prediction, dto: ResultDTO) -> Grade:
-        g = metrics.grade(_to_metric_pred(prediction, fixture), _to_metric_result(dto))
+    async def _grade(
+        self, fixture: Fixture, prediction: Prediction, metric_result: metrics.Result
+    ) -> Grade:
+        g = metrics.grade(_to_metric_pred(prediction, fixture), metric_result)
         points = scoring.match_points(
             fixture.stage, exact_hit=g.exact_hit, outcome_correct=g.outcome_correct
         )
@@ -118,5 +128,25 @@ def _to_metric_result(dto: ResultDTO) -> metrics.Result:
         away_score_90=dto.away_score_90,
         decided_by=dto.decided_by,
         advanced_team=dto.advanced,
+        scorers=scorers,
+    )
+
+
+def _stored_to_metric_result(result: Result, fixture: Fixture) -> metrics.Result:
+    """Build the grading input from an already-stored Result (no external API call)."""
+    advanced: str | None = None
+    if result.advanced_team_id == fixture.home_team_id:
+        advanced = "home"
+    elif result.advanced_team_id == fixture.away_team_id:
+        advanced = "away"
+    scorers = tuple(
+        metrics.ActualScorer(s["player_name"], s["team"], s.get("type", "goal"))
+        for s in result.scorers
+    )
+    return metrics.Result(
+        home_score_90=result.home_score_90,
+        away_score_90=result.away_score_90,
+        decided_by=result.decided_by,  # type: ignore[arg-type]
+        advanced_team=advanced,  # type: ignore[arg-type]
         scorers=scorers,
     )
