@@ -132,6 +132,8 @@ class GradeRead(BaseModel):
 class MatchDetail(BaseModel):
     fixture: FixtureRead
     prediction: PredictionRead | None = None
+    # Every estimator's prediction for this match (LLM + Poisson) — the side-by-side.
+    estimators: list[PredictionRead] = Field(default_factory=list)
     result: ResultRead | None = None
     grade: GradeRead | None = None
     sources: list[dict[str, Any]] = Field(default_factory=list)

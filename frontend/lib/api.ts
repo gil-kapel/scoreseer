@@ -75,6 +75,7 @@ export type GradeRead = {
 export type MatchDetail = {
   fixture: FixtureRead;
   prediction: PredictionRead | null;
+  estimators: PredictionRead[];
   result: ResultRead | null;
   grade: GradeRead | null;
   sources: { url: string; title: string | null }[];

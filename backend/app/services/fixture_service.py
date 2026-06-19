@@ -70,9 +70,12 @@ class FixtureService:
             if pred is not None
             else None
         )
+        # All estimators' predictions for the side-by-side (LLM + Poisson).
+        estimators = [_to_prediction_read(p, fixture) for p in await repo.all_ok(fixture.id)]
         return MatchDetail(
             fixture=fixture_read,
             prediction=_to_prediction_read(pred, fixture) if pred else None,
+            estimators=estimators,
             result=_to_result_read(result) if result else None,
             grade=_to_grade_read(grade) if grade else None,
             sources=sources,

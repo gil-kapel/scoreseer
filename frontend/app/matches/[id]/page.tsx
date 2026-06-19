@@ -167,6 +167,27 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
         <ResultPanel m={m} />
       </div>
 
+      {m.estimators.length > 1 ? (
+        <Card className="space-y-3 p-5">
+          <div className="text-xs uppercase tracking-wide text-fg-muted">Estimators</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {m.estimators.map((e) => (
+              <div key={e.id} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-fg">
+                    {e.model_id === "poisson-v1" ? "📊 Poisson" : "🤖 LLM"}
+                  </span>
+                  <ScoreLine home={e.home_score} away={e.away_score} />
+                </div>
+                <div className="mt-1 nums text-[10px] text-fg-muted">
+                  {Math.round(e.match_confidence * 100)}% confidence
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="space-y-3 p-5">
         <div className="flex items-center justify-between">
           <div className="text-xs uppercase tracking-wide text-fg-muted">Evidence</div>
