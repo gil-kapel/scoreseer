@@ -1,3 +1,4 @@
+from app.services.batch_backfill_service import BatchBackfillService
 from app.services.calibration_service import CalibrationService
 from app.services.dashboard_service import DashboardService
 from app.services.fixture_service import FixtureService
@@ -12,6 +13,7 @@ __all__ = [
     "FixtureSyncService",
     "PredictionService",
     "PoissonService",
+    "BatchBackfillService",
     "GradingService",
     "RunService",
     "CalibrationService",

@@ -20,11 +20,13 @@ from sqlmodel import col
 from app.config import configure_logging, get_settings
 from app.db import dispose_engine, get_sessionmaker
 from app.models import Fixture, Grade, Prediction
+from app.providers.claude_batch import ClaudeBatchPredictor
 from app.providers.claude_factory import claude_adapters
 from app.providers.results import build_results_provider
 from app.providers.sports_api import build_fixtures_provider
 from app.repositories import PredictionRepository
 from app.services import (
+    BatchBackfillService,
     CalibrationService,
     FixtureSyncService,
     GradingService,
@@ -205,6 +207,22 @@ async def _poisson(count: int | None) -> None:
     await _calibrate()
 
 
+async def _batch_backfill(count: int | None) -> None:
+    """LLM predictions on finished fixtures via ONE Anthropic batch (50% off, no web search).
+
+    Stored is_backfill=True (excluded from headline accuracy), then graded so they
+    show in History next to the Poisson baseline + the real result.
+    """
+    settings = get_settings()
+    predictor = ClaudeBatchPredictor(settings)
+    async with get_sessionmaker()() as session:
+        summary = await BatchBackfillService(session, predictor).run(cap=count)
+    print("batch-backfill:", summary)
+    if summary.get("stored"):
+        await _run("grade")  # grade the new predictions so they appear with results
+    await dispose_engine()
+
+
 async def _calibrate() -> None:
     async with get_sessionmaker()() as session:
         profile = await CalibrationService(session).recompute()
@@ -238,6 +256,13 @@ def main() -> None:
     p_poisson.add_argument(
         "count", type=int, nargs="?", default=None, help="Limit fixtures (default: all)."
     )
+    p_batch = sub.add_parser(
+        "batch-backfill",
+        help="LLM predictions on past matches via one Anthropic batch (50% off, no web search).",
+    )
+    p_batch.add_argument(
+        "count", type=int, nargs="?", default=None, help="Limit fixtures (default: all finished)."
+    )
     args = parser.parse_args()
 
     configure_logging(level=get_settings().log_level)
@@ -257,6 +282,8 @@ def main() -> None:
         asyncio.run(_backfill(args.count))
     elif args.command == "poisson":
         asyncio.run(_poisson(args.count))
+    elif args.command == "batch-backfill":
+        asyncio.run(_batch_backfill(args.count))
 
 
 if __name__ == "__main__":
