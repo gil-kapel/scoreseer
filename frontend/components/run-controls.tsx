@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 const TYPES = [
   { value: "grade", label: "Grade", hint: "score finished matches (free, no LLM)" },
   { value: "predict", label: "Predict (forward)", hint: "real Claude calls on upcoming matches" },
-  { value: "backfill", label: "Backfill (past)", hint: "real Claude on played matches — labeled" },
+  { value: "backfill", label: "Backfill (past)", hint: "real Claude + web search on played matches" },
+  {
+    value: "batch_backfill",
+    label: "Batch backfill (cheap)",
+    hint: "one Anthropic batch, no web search — 50% off, ~$0.005/match",
+  },
 ] as const;
 
 export function RunControls() {
@@ -20,13 +25,14 @@ export function RunControls() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function start() {
-    if (
-      (type === "predict" || type === "backfill") &&
-      !window.confirm(
-        `A ${type} run makes REAL Claude calls (web search + LLM) for up to ${count} fixtures ` +
-          "and incurs API cost. Continue?",
-      )
-    ) {
+    const costly = type === "predict" || type === "backfill" || type === "batch_backfill";
+    const note =
+      type === "batch_backfill"
+        ? `A batch backfill makes batched (50%-off) Claude predictions for up to ${count} past ` +
+          "matches — ~$0.005 each, no web search. Continue?"
+        : `A ${type} run makes REAL Claude calls (web search + LLM) for up to ${count} fixtures ` +
+          "and incurs API cost. Continue?";
+    if (costly && !window.confirm(note)) {
       return;
     }
     setBusy(true);

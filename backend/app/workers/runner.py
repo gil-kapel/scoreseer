@@ -2,14 +2,17 @@
 
 import time
 import uuid
+from datetime import UTC, datetime
 
 import httpx
 
 from app.config import get_settings, logger
 from app.db import get_sessionmaker
+from app.models import Run
+from app.providers.claude_batch import ClaudeBatchPredictor
 from app.providers.claude_factory import claude_adapters
 from app.providers.results import build_results_provider
-from app.services import PredictionService, RunService
+from app.services import BatchBackfillService, PredictionService, RunService
 
 # Fixtures with an in-flight per-match predict — surfaced to the UI so it can show
 # a "Predicting…" indicator that survives a page refresh (in-process; resets on restart).
@@ -91,3 +94,50 @@ async def run_backfill(trigger: str, *, cap: int | None = None) -> dict:
                 model_id=settings.predict_model_id,
                 results=results,
             )
+
+
+async def run_batch_backfill(trigger: str, *, cap: int | None = None) -> dict:
+    """LLM predictions on past matches via one Anthropic batch (50% off, no web search).
+
+    Records a Run row so it shows in the admin table, then grades the new
+    predictions. Long batches are better run from the CLI — a free-tier backend can
+    spin down mid-poll and kill the background task.
+    """
+    log = logger.bind(component="run_batch_backfill")
+    sm = get_sessionmaker()
+    async with sm() as session:
+        run = Run(type="batch_backfill", trigger=trigger, status="running", params={"cap": cap})
+        session.add(run)
+        await session.commit()
+        run_id = run.id
+
+    predictor = ClaudeBatchPredictor(get_settings())
+    status = "succeeded"
+    try:
+        async with sm() as session:
+            summary = await BatchBackfillService(session, predictor).run(cap=cap)
+        if not summary.get("stored"):
+            status = "partial"
+    except Exception as exc:  # noqa: BLE001 — surface failure on the run row, don't crash
+        log.warning("batch.error: {}", exc)
+        summary = {"status": "error", "detail": str(exc)[:300]}
+        status = "failed"
+
+    succeeded = int(summary.get("succeeded", 0))
+    stored = int(summary.get("stored", 0))
+    async with sm() as session:
+        finished = await session.get(Run, run_id)
+        if finished is not None:
+            finished.status = status
+            finished.finished_at = datetime.now(UTC)
+            finished.totals = {
+                "succeeded": succeeded,
+                "skipped": 0,
+                "failed": stored - succeeded,
+                **summary,
+            }
+            await session.commit()
+
+    if status != "failed":
+        await run_grade(trigger)
+    return summary

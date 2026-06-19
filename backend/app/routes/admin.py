@@ -16,7 +16,7 @@ from app.db import get_session
 from app.models.schemas import RunDetail, RunItemRead, RunRead
 from app.repositories import RunRepository
 from app.services.run_service import request_cancel
-from app.workers.runner import run_backfill, run_grade, run_predict
+from app.workers.runner import run_backfill, run_batch_backfill, run_grade, run_predict
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -24,11 +24,16 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 # Hold references to background run tasks so they aren't garbage-collected.
 _RUN_TASKS: set[asyncio.Task] = set()
-_RUNNERS = {"predict": run_predict, "grade": run_grade, "backfill": run_backfill}
+_RUNNERS = {
+    "predict": run_predict,
+    "grade": run_grade,
+    "backfill": run_backfill,
+    "batch_backfill": run_batch_backfill,
+}
 
 
 class TriggerRun(BaseModel):
-    type: Literal["predict", "grade", "backfill"]
+    type: Literal["predict", "grade", "backfill", "batch_backfill"]
     count: int | None = Field(default=None, ge=1, le=104)
 
 
