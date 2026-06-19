@@ -15,7 +15,7 @@ from anthropic import AsyncAnthropic
 
 from app.config import Settings, logger
 from app.models.schemas import PredictionContext, PredictionOutput
-from app.prompts import build_prediction_prompt
+from app.prompts import PREDICTION_JSON_SCHEMA, build_prediction_prompt
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -39,7 +39,14 @@ class ClaudeBatchPredictor:
                 "custom_id": cid,
                 "params": {
                     "model": self._settings.predict_model_id,
-                    "max_tokens": 1500,
+                    "max_tokens": 2000,
+                    "thinking": {"type": "adaptive"},
+                    # Enforce the JSON schema (same as the sync predict) so results
+                    # parse reliably; effort=low keeps thinking tokens down.
+                    "output_config": {
+                        "format": {"type": "json_schema", "schema": PREDICTION_JSON_SCHEMA},
+                        "effort": "low",
+                    },
                     "messages": [{"role": "user", "content": build_prediction_prompt(ctx)}],
                 },
             }
