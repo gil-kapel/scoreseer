@@ -7,7 +7,9 @@ services:
   - type: web
     name: scoreseer-api
     runtime: docker
-    region: frankfurt # co-located with the Neon DB (eu-central-1) — kills transatlantic query latency
+    # NOTE: a service's region is immutable. To co-locate with Neon (Frankfurt) you
+    # must DELETE + recreate the service from this Blueprint with `region: frankfurt`
+    # added back — changing it on a live service stalls the Blueprint sync and blocks deploys.
     dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: free
