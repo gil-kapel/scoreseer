@@ -17,7 +17,9 @@ async def _clear_settings_cache():
 
 
 @pytest.mark.asyncio
-async def test_auth_disabled_by_default(session, _clear_settings_cache) -> None:
+async def test_auth_disabled_when_no_token(session, monkeypatch, _clear_settings_cache) -> None:
+    monkeypatch.setenv("API_TOKEN", "")  # explicit: ignore any API_TOKEN in the repo .env
+    get_settings.cache_clear()
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/dashboard/metrics")

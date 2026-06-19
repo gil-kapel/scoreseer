@@ -15,8 +15,11 @@ from app.config import Settings, logger
 from app.prompts import build_search_prompt
 from app.providers.base import NarrativeBundle
 
-_WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search"}
-_MAX_CONTINUATIONS = 4
+# max_uses caps the number of searches per prediction — without it the model
+# searches 5-8x and re-sends every page on each continuation, which is what blew
+# up both the search count and the input-token bill.
+_WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 3}
+_MAX_CONTINUATIONS = 3
 
 
 class ClaudeNarrativeProvider:
@@ -37,7 +40,7 @@ class ClaudeNarrativeProvider:
         for i in range(_MAX_CONTINUATIONS):
             resp = await self._client.messages.create(
                 model=self._settings.format_model_id,
-                max_tokens=4000,
+                max_tokens=1500,
                 tools=cast("Any", [_WEB_SEARCH_TOOL]),
                 messages=cast("Any", messages),
             )

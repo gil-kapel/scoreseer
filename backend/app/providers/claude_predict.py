@@ -86,8 +86,14 @@ class ClaudePredictionModel:
             model=self._settings.predict_model_id,
             max_tokens=2000,
             thinking={"type": "adaptive"},
+            # effort=low trims thinking depth — a constrained scoreline prediction
+            # doesn't need deep reasoning, and thinking tokens are the priciest output.
             output_config=cast(
-                "Any", {"format": {"type": "json_schema", "schema": PREDICTION_JSON_SCHEMA}}
+                "Any",
+                {
+                    "format": {"type": "json_schema", "schema": PREDICTION_JSON_SCHEMA},
+                    "effort": "low",
+                },
             ),
             messages=cast("Any", messages),
         )
