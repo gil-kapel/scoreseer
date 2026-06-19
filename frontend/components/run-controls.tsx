@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button";
 
 const TYPES = [
   { value: "grade", label: "Grade", hint: "score finished matches (free, no LLM)" },
+  {
+    value: "poisson",
+    label: "Regenerate Poisson",
+    hint: "rebuild + regrade the free Poisson baseline (no Claude)",
+  },
   { value: "predict", label: "Predict (forward)", hint: "real Claude calls on upcoming matches" },
   { value: "backfill", label: "Backfill (past)", hint: "real Claude + web search on played matches" },
   {

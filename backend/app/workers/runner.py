@@ -5,14 +5,23 @@ import uuid
 from datetime import UTC, datetime
 
 import httpx
+from sqlalchemy import delete, select
+from sqlmodel import col
 
 from app.config import get_settings, logger
 from app.db import get_sessionmaker
-from app.models import Run
+from app.models import Fixture, Grade, Prediction, Run
 from app.providers.claude_batch import ClaudeBatchPredictor
 from app.providers.claude_factory import claude_adapters
 from app.providers.results import build_results_provider
-from app.services import BatchBackfillService, PredictionService, RunService
+from app.services import (
+    BatchBackfillService,
+    CalibrationService,
+    PoissonService,
+    PredictionService,
+    RunService,
+)
+from app.services.poisson_service import POISSON_MODEL_ID
 
 # Fixtures with an in-flight per-match predict — surfaced to the UI so it can show
 # a "Predicting…" indicator that survives a page refresh (in-process; resets on restart).
@@ -94,6 +103,62 @@ async def run_backfill(trigger: str, *, cap: int | None = None) -> dict:
                 model_id=settings.predict_model_id,
                 results=results,
             )
+
+
+async def run_poisson(trigger: str, *, cap: int | None = None) -> dict:
+    """Regenerate the free Poisson baseline for every fixture (upsert + regrade + calibrate).
+
+    No Claude. Records a Run row, then grades the refreshed predictions and recomputes
+    calibration. Safe to re-run after a model change.
+    """
+    log = logger.bind(component="run_poisson")
+    sm = get_sessionmaker()
+    async with sm() as session:
+        run = Run(type="poisson", trigger=trigger, status="running", params={"cap": cap})
+        session.add(run)
+        await session.commit()
+        run_id = run.id
+
+    upserted = 0
+    status = "succeeded"
+    try:
+        async with sm() as session:
+            stmt = select(Fixture).order_by(col(Fixture.kickoff_utc))
+            if cap:
+                stmt = stmt.limit(cap)
+            fixtures = (await session.execute(stmt)).scalars().all()
+            for fixture in fixtures:
+                await PoissonService(session).predict_fixture(fixture)  # upsert in place
+                upserted += 1
+            # Drop stale Poisson grades (scored the old scoreline) so they re-grade.
+            await session.execute(
+                delete(Grade).where(
+                    col(Grade.prediction_id).in_(
+                        select(col(Prediction.id)).where(
+                            col(Prediction.model_id) == POISSON_MODEL_ID
+                        )
+                    )
+                )
+            )
+            await session.commit()
+        await run_grade(trigger, cap=200)  # grade the refreshed Poisson (+ any ungraded)
+        async with sm() as session:
+            profile = await CalibrationService(session).recompute()
+            if profile is not None:
+                await session.commit()
+    except Exception as exc:  # noqa: BLE001 — record failure on the run row
+        log.warning("poisson.error: {}", exc)
+        status = "failed"
+
+    async with sm() as session:
+        finished = await session.get(Run, run_id)
+        if finished is not None:
+            finished.status = status
+            finished.finished_at = datetime.now(UTC)
+            finished.totals = {"succeeded": upserted, "skipped": 0, "failed": 0}
+            await session.commit()
+    log.info("run_poisson.done upserted={} status={}", upserted, status)
+    return {"status": status, "upserted": upserted}
 
 
 async def run_batch_backfill(trigger: str, *, cap: int | None = None) -> dict:

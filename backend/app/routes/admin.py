@@ -18,7 +18,13 @@ from app.models import Run
 from app.models.schemas import RunDetail, RunItemRead, RunRead
 from app.repositories import RunRepository
 from app.services.run_service import request_cancel
-from app.workers.runner import run_backfill, run_batch_backfill, run_grade, run_predict
+from app.workers.runner import (
+    run_backfill,
+    run_batch_backfill,
+    run_grade,
+    run_poisson,
+    run_predict,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -31,11 +37,12 @@ _RUNNERS = {
     "grade": run_grade,
     "backfill": run_backfill,
     "batch_backfill": run_batch_backfill,
+    "poisson": run_poisson,
 }
 
 
 class TriggerRun(BaseModel):
-    type: Literal["predict", "grade", "backfill", "batch_backfill"]
+    type: Literal["predict", "grade", "backfill", "batch_backfill", "poisson"]
     count: int | None = Field(default=None, ge=1, le=104)
 
 
