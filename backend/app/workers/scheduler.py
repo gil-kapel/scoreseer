@@ -1,32 +1,34 @@
-"""APScheduler wiring — registers predict/grade interval jobs.
+"""APScheduler wiring — FREE jobs only (sync + grade), so SCHEDULER_ENABLED can be
+turned on without ever spending Claude.
 
-Gated by SCHEDULER_ENABLED (off by default) so it never makes autonomous Claude
-calls unless explicitly turned on. Jobs are idempotent (RunService dedups), so a
-missed run is harmless; first fire is one interval after start.
+The lab self-updates: sync pulls new fixture statuses + the grade job scores
+newly-finished matches (Poisson + LLM each) and recomputes calibration — all from
+the free sports API, no LLM calls. Predictions stay manual (the paid step is always
+a deliberate button press). Jobs are idempotent, so a missed run is harmless.
 """
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import get_settings, logger
-from app.workers.runner import run_grade, run_predict
+from app.workers.runner import run_grade, run_sync
 
 
-async def _predict_job() -> None:
-    logger.bind(component="scheduler").info("job.predict.start")
-    await run_predict("scheduled")
+async def _sync_job() -> None:
+    logger.bind(component="scheduler").info("job.sync.start")
+    await run_sync("scheduled")
 
 
 async def _grade_job() -> None:
     logger.bind(component="scheduler").info("job.grade.start")
-    await run_grade("scheduled")
+    await run_grade("scheduled")  # also recomputes calibration
 
 
 def build_scheduler() -> AsyncIOScheduler:
     settings = get_settings()
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
-        _predict_job, "interval", hours=settings.predict_interval_hours,
-        id="predict", max_instances=1, coalesce=True, misfire_grace_time=3600,
+        _sync_job, "interval", hours=settings.grade_interval_hours,
+        id="sync", max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     scheduler.add_job(
         _grade_job, "interval", hours=settings.grade_interval_hours,

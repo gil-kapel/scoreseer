@@ -46,8 +46,7 @@ async def lifespan(app: FastAPI):
         scheduler = build_scheduler()
         scheduler.start()
         logger.bind(component="app").info(
-            "scheduler.started predict_every={}h grade_every={}h",
-            settings.predict_interval_hours, settings.grade_interval_hours,
+            "scheduler.started free jobs (sync+grade) every={}h", settings.grade_interval_hours,
         )
     yield
     if scheduler is not None:

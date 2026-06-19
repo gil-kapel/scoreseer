@@ -14,9 +14,11 @@ from app.models import Fixture, Grade, Prediction, Run
 from app.providers.claude_batch import ClaudeBatchPredictor
 from app.providers.claude_factory import claude_adapters
 from app.providers.results import build_results_provider
+from app.providers.sports_api import build_fixtures_provider
 from app.services import (
     BatchBackfillService,
     CalibrationService,
+    FixtureSyncService,
     PoissonService,
     PredictionService,
     RunService,
@@ -79,6 +81,15 @@ async def run_predict(trigger: str, *, cap: int | None = None) -> dict:
             model=model,
             model_id=settings.predict_model_id,
         )
+
+
+async def run_sync(trigger: str) -> dict:
+    """Sync fixtures + statuses from the (free) sports API. No Claude."""
+    settings = get_settings()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        provider = build_fixtures_provider(settings, client)
+        async with get_sessionmaker()() as session:
+            return await FixtureSyncService(session, provider).sync()
 
 
 async def run_grade(trigger: str, *, cap: int | None = None) -> dict:
