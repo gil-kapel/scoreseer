@@ -22,10 +22,14 @@ class DashboardRepository:
         outcome: str | None = None,
         limit: int | None = None,
         include_backfill: bool = True,
+        estimator: str | None = None,
     ) -> list[GradedRow]:
         """All (fixture, prediction, final result, grade) rows, ordered by kickoff.
 
-        `include_backfill=False` drops hindsight predictions from accuracy stats.
+        `include_backfill=False` drops HINDSIGHT predictions (the web-search backfill
+        that saw the result); the honest as-of batch-LLM still counts.
+        `estimator` filters to "poisson" or "llm" (the LLM estimator = everything that
+        isn't the Poisson baseline).
         """
         stmt = (
             select(Fixture, Prediction, Result, Grade)
@@ -36,7 +40,15 @@ class DashboardRepository:
             .order_by(col(Fixture.kickoff_utc))
         )
         if not include_backfill:
-            stmt = stmt.where(col(Prediction.is_backfill).is_(False))
+            # Hindsight = a backfill prediction that ISN'T the as-of batch (i.e. it used
+            # web search and saw the result). The honest as-of batch-LLM is kept.
+            stmt = stmt.where(
+                col(Prediction.is_backfill).is_(False) | col(Prediction.model_id).like("%batch%")
+            )
+        if estimator == "poisson":
+            stmt = stmt.where(col(Prediction.model_id) == "poisson-v1")
+        elif estimator == "llm":
+            stmt = stmt.where(col(Prediction.model_id) != "poisson-v1")
         if stage:
             stmt = stmt.where(col(Fixture.stage) == stage)
         if outcome == "hit":

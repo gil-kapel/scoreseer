@@ -33,9 +33,11 @@ class DashboardService:
         self.calib = CalibrationRepository(session)
 
     async def metrics(self) -> DashboardMetrics:
-        rows = await self.repo.graded(include_backfill=False)
-        all_graded = await self.repo.graded(include_backfill=True)
-        backfill_excluded = len(all_graded) - len(rows)
+        # The headline reflects the LLM estimator (your real predictions); Poisson is
+        # the baseline benchmark shown on the Estimators page.
+        rows = await self.repo.graded(include_backfill=False, estimator="llm")
+        all_llm = await self.repo.graded(include_backfill=True, estimator="llm")
+        backfill_excluded = len(all_llm) - len(rows)
         n = len(rows)
         if n == 0:
             return DashboardMetrics(
@@ -65,13 +67,10 @@ class DashboardService:
         Honest as-of replays count (Poisson + the as-of batch-LLM); only the
         web-search backfill is dropped as hindsight-poisoned (it saw the result).
         """
-        rows = await self.repo.graded(include_backfill=True)
+        rows = await self.repo.graded(include_backfill=False)  # hindsight already excluded
         groups: dict[str, list[GradedRow]] = {}
         for row in rows:
-            pred = row[1]
-            if pred.is_backfill and "batch" not in pred.model_id:
-                continue  # hindsight web-search backfill — excluded
-            groups.setdefault(_estimator_name(pred.model_id), []).append(row)
+            groups.setdefault(_estimator_name(row[1].model_id), []).append(row)
 
         out: list[EstimatorStats] = []
         for estimator, grows in sorted(groups.items()):
@@ -91,7 +90,7 @@ class DashboardService:
         return out
 
     async def calibration(self) -> CalibrationView:
-        rows = await self.repo.graded(include_backfill=False)
+        rows = await self.repo.graded(include_backfill=False, estimator="llm")
         profiles = await self.calib.list_all()
         latest = profiles[0] if profiles else None
         first_brier, second_brier = _half_briers(rows)
@@ -108,11 +107,9 @@ class DashboardService:
     async def history(
         self, *, stage: str | None, outcome: str | None, limit: int
     ) -> list[HistoryRow]:
-        # One row per fixture: per-estimator grading now creates one grade per
-        # estimator (Poisson + LLM), which would otherwise show as duplicate matches.
-        # Show the forward baseline (include_backfill=False) — the per-estimator
-        # side-by-side comparison lives on the Estimators page.
-        all_rows = await self.repo.graded(stage=stage, include_backfill=False)
+        # The LLM estimator (your real predictions), one row per fixture. Poisson +
+        # the per-estimator comparison live on the Estimators page.
+        all_rows = await self.repo.graded(stage=stage, include_backfill=False, estimator="llm")
         latest: dict[uuid.UUID, GradedRow] = {}
         for row in all_rows:
             fid = row[0].id
