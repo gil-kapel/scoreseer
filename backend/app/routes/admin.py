@@ -6,6 +6,7 @@ lock as the scheduler, so a manual trigger returns 409 if a run is in progress.
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.models import Run
 from app.models.schemas import RunDetail, RunItemRead, RunRead
 from app.repositories import RunRepository
 from app.services.run_service import request_cancel
@@ -68,9 +70,16 @@ async def trigger_run(body: TriggerRun) -> dict:
 
 
 @router.post("/runs/{run_id}/cancel")
-async def cancel_run(run_id: uuid.UUID) -> dict:
-    """Ask a running run to stop after its current fixture."""
-    found = request_cancel(str(run_id))
-    if not found:
-        raise HTTPException(status_code=404, detail="no active run with that id")
-    return {"status": "cancelling", "run_id": str(run_id)}
+async def cancel_run(run_id: uuid.UUID, session: SessionDep) -> dict:
+    """Stop a run. If it's live, signal it; if it's a stale 'running' row left by a
+    restart (no live task), finalize it directly so the UI never sticks on running."""
+    if request_cancel(str(run_id)):
+        return {"status": "cancelling", "run_id": str(run_id)}
+    run = await session.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if run.status == "running":
+        run.status = "cancelled"
+        run.finished_at = datetime.now(UTC)
+        await session.commit()
+    return {"status": "cancelled", "run_id": str(run_id)}

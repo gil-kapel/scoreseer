@@ -5,14 +5,33 @@ SCHEDULER_ENABLED) starts the APScheduler predict/grade jobs.
 """
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI
+from sqlalchemy import update
+from sqlmodel import col
 
 from app.auth import require_api_key
 from app.config import configure_logging, get_settings, logger
-from app.db import dispose_engine
+from app.db import dispose_engine, get_sessionmaker
+from app.models import Run
 from app.routes import admin, dashboard, fixtures, health, matches
 from app.workers.scheduler import build_scheduler
+
+
+async def _fail_orphaned_runs() -> None:
+    """A run left 'running' by a previous shutdown has no live task to finish it —
+    mark it failed on boot so the UI never shows a permanently stuck run."""
+    async with get_sessionmaker()() as session:
+        result = await session.execute(
+            update(Run)
+            .where(col(Run.status) == "running")
+            .values(status="failed", finished_at=datetime.now(UTC))
+        )
+        await session.commit()
+    count = getattr(result, "rowcount", 0)
+    if count:
+        logger.bind(component="app").info("startup.orphaned_runs_failed n={}", count)
 
 
 @asynccontextmanager
@@ -20,6 +39,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.is_production)
     logger.bind(component="app").info("app.init: {}", settings.redacted())
+    await _fail_orphaned_runs()
 
     scheduler = None
     if settings.scheduler_enabled:
