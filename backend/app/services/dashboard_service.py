@@ -141,7 +141,9 @@ class DashboardService:
                     outcome_correct=grade.outcome_correct,
                     goals_abs_error=grade.goals_abs_error,
                     points=grade.points,
-                    is_backfill=pred.is_backfill,
+                    # Only genuine hindsight (web-search backfill) wears the badge —
+                    # the as-of batch-LLM is honest.
+                    is_backfill=pred.is_backfill and "batch" not in pred.model_id,
                 )
             )
         return out

@@ -164,7 +164,9 @@ def _to_prediction_read(pred: Prediction, fixture: Fixture) -> PredictionRead:
         model_id=pred.model_id,
         prompt_version=pred.prompt_version,
         calibration_version=pred.calibration_version,
-        is_backfill=pred.is_backfill,
+        # Only the web-search backfill (saw the result) is hindsight; the as-of batch
+        # is honest, so it shouldn't wear the "excluded" badge.
+        is_backfill=pred.is_backfill and "batch" not in pred.model_id,
         created_at=pred.created_at,
     )
 
