@@ -14,6 +14,7 @@ from app.models.schemas import (
     CalibrationVersionRead,
     CalibrationView,
     DashboardMetrics,
+    EstimatorStats,
     HistoryRow,
     ReliabilityBin,
     StagePoints,
@@ -57,6 +58,37 @@ class DashboardService:
             backfill_excluded=backfill_excluded,
             trend=_trend(rows),
         )
+
+    async def compare(self) -> list[EstimatorStats]:
+        """Per-estimator accuracy (Poisson vs LLM) over the same graded fixtures.
+
+        Honest as-of replays count (Poisson + the as-of batch-LLM); only the
+        web-search backfill is dropped as hindsight-poisoned (it saw the result).
+        """
+        rows = await self.repo.graded(include_backfill=True)
+        groups: dict[str, list[GradedRow]] = {}
+        for row in rows:
+            pred = row[1]
+            if pred.is_backfill and "batch" not in pred.model_id:
+                continue  # hindsight web-search backfill — excluded
+            groups.setdefault(_estimator_name(pred.model_id), []).append(row)
+
+        out: list[EstimatorStats] = []
+        for estimator, grows in sorted(groups.items()):
+            grades = [g for _, _, _, g in grows]
+            out.append(
+                EstimatorStats(
+                    estimator=estimator,
+                    n_graded=len(grades),
+                    outcome_accuracy=_mean(g.outcome_correct for g in grades),
+                    exact_rate=_mean(g.exact_hit for g in grades),
+                    goals_mae=_mean(g.goals_abs_error for g in grades),
+                    confidence_brier=_mean(g.confidence_brier for g in grades),
+                    total_points=sum(g.points for g in grades),
+                    max_points=sum(scoring.max_points(f.stage) for f, _, _, _ in grows),
+                )
+            )
+        return out
 
     async def calibration(self) -> CalibrationView:
         rows = await self.repo.graded(include_backfill=False)
@@ -116,6 +148,10 @@ class DashboardService:
                 )
             )
         return out
+
+
+def _estimator_name(model_id: str) -> str:
+    return "Poisson" if model_id == "poisson-v1" else "LLM"
 
 
 def _mean(values) -> float:

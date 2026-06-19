@@ -183,6 +183,19 @@ class StagePoints(BaseModel):
     n: int
 
 
+class EstimatorStats(BaseModel):
+    """Head-to-head accuracy for one estimator (Poisson vs LLM) — the bake-off."""
+
+    estimator: str
+    n_graded: int
+    outcome_accuracy: float
+    exact_rate: float
+    goals_mae: float
+    confidence_brier: float
+    total_points: int
+    max_points: int
+
+
 class DashboardMetrics(BaseModel):
     n_graded: int
     outcome_accuracy: float

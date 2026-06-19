@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.models.schemas import CalibrationView, DashboardMetrics, HistoryRow
+from app.models.schemas import CalibrationView, DashboardMetrics, EstimatorStats, HistoryRow
 from app.services import DashboardService
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -22,6 +22,12 @@ async def metrics(session: SessionDep) -> DashboardMetrics:
 @router.get("/dashboard/calibration", response_model=CalibrationView)
 async def calibration(session: SessionDep) -> CalibrationView:
     return await DashboardService(session).calibration()
+
+
+@router.get("/dashboard/estimators", response_model=list[EstimatorStats])
+async def estimators(session: SessionDep) -> list[EstimatorStats]:
+    """Head-to-head accuracy per estimator (Poisson vs LLM) — the bake-off."""
+    return await DashboardService(session).compare()
 
 
 @router.get("/history", response_model=list[HistoryRow])
