@@ -91,7 +91,7 @@ class DashboardService:
             rows = [r for r in rows if r[3].outcome_correct]
         elif outcome == "miss":
             rows = [r for r in rows if not r[3].outcome_correct]
-        rows.sort(key=lambda r: r[0].kickoff_utc)
+        rows.sort(key=lambda r: r[0].kickoff_utc, reverse=True)  # most recent first
         rows = rows[:limit]
 
         ids = {f.home_team_id for f, _, _, _ in rows} | {f.away_team_id for f, _, _, _ in rows}
