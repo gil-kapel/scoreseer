@@ -4,6 +4,7 @@ All metrics derive from stored Grades (no recompute of grading logic here). The
 'calibration improving?' signal is the first-half vs second-half confidence Brier.
 """
 
+import uuid
 from itertools import groupby
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,7 +76,24 @@ class DashboardService:
     async def history(
         self, *, stage: str | None, outcome: str | None, limit: int
     ) -> list[HistoryRow]:
-        rows = await self.repo.graded(stage=stage, outcome=outcome, limit=limit)
+        # One row per fixture: per-estimator grading now creates one grade per
+        # estimator (Poisson + LLM), which would otherwise show as duplicate matches.
+        # Show the forward baseline (include_backfill=False) — the per-estimator
+        # side-by-side comparison lives on the Estimators page.
+        all_rows = await self.repo.graded(stage=stage, include_backfill=False)
+        latest: dict[uuid.UUID, GradedRow] = {}
+        for row in all_rows:
+            fid = row[0].id
+            if fid not in latest or row[1].created_at > latest[fid][1].created_at:
+                latest[fid] = row
+        rows = list(latest.values())
+        if outcome == "hit":
+            rows = [r for r in rows if r[3].outcome_correct]
+        elif outcome == "miss":
+            rows = [r for r in rows if not r[3].outcome_correct]
+        rows.sort(key=lambda r: r[0].kickoff_utc)
+        rows = rows[:limit]
+
         ids = {f.home_team_id for f, _, _, _ in rows} | {f.away_team_id for f, _, _, _ in rows}
         teams = await self.repo.team_map(ids)
         out = []

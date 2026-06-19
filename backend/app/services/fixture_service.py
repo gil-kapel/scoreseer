@@ -63,7 +63,13 @@ class FixtureService:
                 sources, quality = snap.sources, snap.data_quality
 
         result = await ResultRepository(self.session).get(fixture.id)
-        grade = await GradeRepository(self.session).by_fixture(fixture.id)
+        # Grade for the DISPLAYED prediction specifically — a fixture now has one grade
+        # per estimator, so by_fixture() would raise (multiple rows).
+        grade = (
+            await GradeRepository(self.session).by_prediction(pred.id)
+            if pred is not None
+            else None
+        )
         return MatchDetail(
             fixture=fixture_read,
             prediction=_to_prediction_read(pred, fixture) if pred else None,
