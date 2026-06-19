@@ -43,10 +43,15 @@ class GradingService:
             await self.session.commit()
             return {"status": "void"}
 
-        prediction = await self.predictions.latest_ok(fixture_id)
-        if prediction is None:
+        # Grade EVERY OK prediction for the fixture (one per estimator), not just the
+        # latest — so Poisson and the LLM/batch each get their own grade for the bake-off.
+        predictions = await self.predictions.all_ok(fixture_id)
+        if not predictions:
             return {"status": "no_prediction"}
-        if await self.grades.by_prediction(prediction.id) is not None:
+        ungraded = [
+            p for p in predictions if await self.grades.by_prediction(p.id) is None
+        ]
+        if not ungraded:
             return {"status": "skipped"}
 
         dto = await self.results.get_result(fixture.external_id)
@@ -57,14 +62,10 @@ class GradingService:
             dto, home_id=fixture.home_team_id, away_id=fixture.away_team_id
         )
         await self.result_repo.upsert(fixture_id=fixture_id, values=values)
-        grade = await self._grade(fixture, prediction, dto)
+        for prediction in ungraded:
+            await self._grade(fixture, prediction, dto)
         await self.session.commit()
-        return {
-            "status": "graded",
-            "exact_hit": grade.exact_hit,
-            "outcome_correct": grade.outcome_correct,
-            "goals_abs_error": grade.goals_abs_error,
-        }
+        return {"status": "graded", "n_graded": len(ungraded)}
 
     async def _grade(self, fixture: Fixture, prediction: Prediction, dto: ResultDTO) -> Grade:
         g = metrics.grade(_to_metric_pred(prediction, fixture), _to_metric_result(dto))

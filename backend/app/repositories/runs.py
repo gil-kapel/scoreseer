@@ -97,15 +97,20 @@ class RunRepository:
         return list(rows)
 
     async def eligible_for_grading(self, *, cap: int) -> list[uuid.UUID]:
-        predicted = select(col(Prediction.fixture_id)).where(col(Prediction.status) == "ok")
-        graded = select(col(Grade.fixture_id))
+        # Per-estimator: a fixture is eligible if ANY of its OK predictions lacks a grade
+        # (by prediction id, not just by fixture) — so a newly-added estimator gets graded
+        # even when another estimator on the same fixture already was.
+        graded_pred_ids = select(col(Grade.prediction_id))
+        with_ungraded = select(col(Prediction.fixture_id)).where(
+            col(Prediction.status) == "ok",
+            ~col(Prediction.id).in_(graded_pred_ids),
+        )
         rows = (
             await self.session.execute(
                 select(col(Fixture.id))
                 .where(
                     col(Fixture.status) == "finished",
-                    col(Fixture.id).in_(predicted),
-                    ~col(Fixture.id).in_(graded),
+                    col(Fixture.id).in_(with_ungraded),
                 )
                 .order_by(col(Fixture.kickoff_utc))
                 .limit(cap)

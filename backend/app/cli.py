@@ -24,7 +24,6 @@ from app.providers.claude_batch import ClaudeBatchPredictor
 from app.providers.claude_factory import claude_adapters
 from app.providers.results import build_results_provider
 from app.providers.sports_api import build_fixtures_provider
-from app.repositories import PredictionRepository
 from app.services import (
     BatchBackfillService,
     CalibrationService,
@@ -33,6 +32,7 @@ from app.services import (
     PoissonService,
     PredictionService,
 )
+from app.services.poisson_service import POISSON_MODEL_ID
 from app.workers.runner import run_grade, run_predict
 
 
@@ -167,19 +167,18 @@ _SEED_MODEL_ID = "seed-demo"
 
 
 async def _poisson(count: int | None) -> None:
-    """Replace random demo seeds with honest Poisson predictions, then grade + calibrate.
+    """(Re)generate the as-of Poisson baseline for every fixture, then grade + calibrate.
 
-    Free (no Claude). Per fixture: drop any `seed-demo` prediction + its grade, then
-    — if no real (LLM) prediction remains — create an as-of Poisson prediction. Real
-    LLM predictions and the labeled backfill are left untouched.
+    Free (no Claude). Upserts one Poisson prediction per fixture — it coexists with any
+    LLM/batch prediction (different version key), so it's the always-present baseline.
+    Re-running regenerates them in place (e.g. after a model change).
     """
-    created = replaced = kept = 0
+    upserted = replaced = 0
     async with get_sessionmaker()() as session:
         stmt = select(Fixture).order_by(col(Fixture.kickoff_utc))
         if count:
             stmt = stmt.limit(count)
         fixtures = (await session.execute(stmt)).scalars().all()
-        repo = PredictionRepository(session)
         for fx in fixtures:
             seeds = (
                 await session.execute(
@@ -194,15 +193,20 @@ async def _poisson(count: int | None) -> None:
                 await session.delete(seed)
                 replaced += 1
             await session.flush()
-            if await repo.latest_ok(fx.id) is not None:  # a real LLM prediction survives
-                kept += 1
-                continue
-            await PoissonService(session).predict_fixture(fx)
-            created += 1
+            await PoissonService(session).predict_fixture(fx)  # upsert (overwrites in place)
+            upserted += 1
+        # Drop stale Poisson grades (they scored the old scoreline) so they re-grade.
+        await session.execute(
+            delete(Grade).where(
+                col(Grade.prediction_id).in_(
+                    select(col(Prediction.id)).where(col(Prediction.model_id) == POISSON_MODEL_ID)
+                )
+            )
+        )
         await session.commit()
     await dispose_engine()
-    print(f"poisson: created={created} (replaced {replaced} seeds, kept {kept} real predictions)")
-    # Grade the new Poisson predictions and refresh calibration (both free).
+    print(f"poisson: upserted={upserted} (cleared {replaced} legacy seeds)")
+    # Grade the (new) Poisson predictions and refresh calibration (both free).
     await _run("grade")
     await _calibrate()
 

@@ -55,12 +55,11 @@ async def test_grade_exact_hit_and_idempotent(session) -> None:
 
     result = await service.grade_fixture(fixture.id)
     assert result["status"] == "graded"
-    assert (result["exact_hit"], result["outcome_correct"], result["goals_abs_error"]) == (
-        True, True, 0,
-    )
+    assert result["n_graded"] == 1
 
     grade = await GradeRepository(session).by_fixture(fixture.id)
     assert grade is not None
+    assert (grade.exact_hit, grade.outcome_correct, grade.goals_abs_error) == (True, True, 0)
     assert grade.scorer_recall == 1.0
 
     # Re-grading is a no-op.
@@ -73,9 +72,12 @@ async def test_grade_wrong_outcome(session) -> None:
     fixture.status = "finished"
     await _seed_prediction(session, fixture)  # predicted 2-1 (home win)
     result = await GradingService(session, FakeResults(_result(0, 3))).grade_fixture(fixture.id)
-    assert result["exact_hit"] is False
-    assert result["outcome_correct"] is False
-    assert result["goals_abs_error"] == 0  # both totals are 3
+    assert result["status"] == "graded"
+    grade = await GradeRepository(session).by_fixture(fixture.id)
+    assert grade is not None
+    assert grade.exact_hit is False
+    assert grade.outcome_correct is False
+    assert grade.goals_abs_error == 0  # both totals are 3
 
 
 async def test_awaiting_result_when_none(session) -> None:

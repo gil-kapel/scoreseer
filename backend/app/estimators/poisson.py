@@ -121,14 +121,10 @@ def predict_score(
     ph = [_poisson_pmf(i, lam_home) for i in range(max_goals + 1)]
     pa = [_poisson_pmf(j, lam_away) for j in range(max_goals + 1)]
 
-    best = (0, 0)
-    best_p = -1.0
     p_home = p_draw = p_away = 0.0
     for i in range(max_goals + 1):
         for j in range(max_goals + 1):
             p = ph[i] * pa[j]
-            if p > best_p:
-                best_p, best = p, (i, j)
             if i > j:
                 p_home += p
             elif i == j:
@@ -138,9 +134,17 @@ def predict_score(
     # Renormalize: the grid is truncated at max_goals, so a sliver of mass is lost.
     total = p_home + p_draw + p_away
     p_home, p_draw, p_away = p_home / total, p_draw / total, p_away / total
+
+    # Scoreline = expected goals rounded, NOT the joint mode. The joint mode of two
+    # independent Poissons collapses to 1-1 for any ~1-2 xG match regardless of who's
+    # stronger (P(1) is the modal count for lambda in [1,2)), so the mode buried all
+    # the team-strength signal under a wall of 1-1s. Rounding the expected goals keeps
+    # that signal: 1.95 -> 2, 1.13 -> 1 -> a 2-1, not a 1-1.
+    home_goals = min(int(lam_home + 0.5), max_goals)
+    away_goals = min(int(lam_away + 0.5), max_goals)
     return ScorePrediction(
-        home_goals=best[0],
-        away_goals=best[1],
+        home_goals=home_goals,
+        away_goals=away_goals,
         p_home=p_home,
         p_draw=p_draw,
         p_away=p_away,

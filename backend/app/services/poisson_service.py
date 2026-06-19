@@ -47,8 +47,7 @@ class PoissonService:
             f"home/draw/away = {pred.p_home:.0%}/{pred.p_draw:.0%}/{pred.p_away:.0%})."
         )
         log.info("poisson.predict score={}-{}", pred.home_goals, pred.away_goals)
-        return await self.repo.create_prediction(
-            fixture_id=fixture.id,
+        fields = dict(
             snapshot_id=None,
             home_score=pred.home_goals,
             away_score=pred.away_goals,
@@ -63,6 +62,21 @@ class PoissonService:
             is_backfill=False,
             status="ok",
         )
+        # Upsert: overwrite this fixture's existing Poisson prediction in place so a
+        # re-run regenerates it (e.g. after a model change) instead of colliding on
+        # the (fixture, prompt, model, calibration) unique key.
+        existing = await self.repo.current(
+            fixture_id=fixture.id,
+            prompt_version=POISSON_VERSION,
+            model_id=POISSON_MODEL_ID,
+            calibration_version=0,
+        )
+        if existing is not None:
+            for key, value in fields.items():
+                setattr(existing, key, value)
+            await self.session.flush()
+            return existing
+        return await self.repo.create_prediction(fixture_id=fixture.id, **fields)
 
     def _advancing(self, fixture: Fixture, outcome: str):
         if fixture.stage not in _KNOCKOUT_STAGES or outcome == "draw":

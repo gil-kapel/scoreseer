@@ -59,6 +59,23 @@ class PredictionRepository:
             )
         ).scalar_one_or_none()
 
+    async def all_ok(self, fixture_id: uuid.UUID) -> list[Prediction]:
+        """Every OK prediction for a fixture (one per estimator) — for per-estimator grading."""
+        return list(
+            (
+                await self.session.execute(
+                    select(Prediction)
+                    .where(
+                        col(Prediction.fixture_id) == fixture_id,
+                        col(Prediction.status) == "ok",
+                    )
+                    .order_by(col(Prediction.created_at))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
     async def latest_ok(self, fixture_id: uuid.UUID) -> Prediction | None:
         return (
             await self.session.execute(
