@@ -10,17 +10,12 @@ a deliberate button press). Jobs are idempotent, so a missed run is harmless.
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import get_settings, logger
-from app.workers.runner import run_grade, run_sync
+from app.workers.runner import run_sync
 
 
 async def _sync_job() -> None:
     logger.bind(component="scheduler").info("job.sync.start")
-    await run_sync("scheduled")
-
-
-async def _grade_job() -> None:
-    logger.bind(component="scheduler").info("job.grade.start")
-    await run_grade("scheduled")  # also recomputes calibration
+    await run_sync("scheduled")  # syncs statuses, then grades + recalibrates
 
 
 def build_scheduler() -> AsyncIOScheduler:
@@ -29,9 +24,5 @@ def build_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(
         _sync_job, "interval", hours=settings.grade_interval_hours,
         id="sync", max_instances=1, coalesce=True, misfire_grace_time=3600,
-    )
-    scheduler.add_job(
-        _grade_job, "interval", hours=settings.grade_interval_hours,
-        id="grade", max_instances=1, coalesce=True, misfire_grace_time=3600,
     )
     return scheduler

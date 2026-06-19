@@ -25,6 +25,7 @@ from app.workers.runner import (
     run_grade,
     run_poisson,
     run_predict,
+    run_sync,
 )
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -34,6 +35,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 # Hold references to background run tasks so they aren't garbage-collected.
 _RUN_TASKS: set[asyncio.Task] = set()
 _RUNNERS = {
+    "sync": run_sync,
     "predict": run_predict,
     "grade": run_grade,
     "backfill": run_backfill,
@@ -45,7 +47,7 @@ _RUNNERS = {
 
 class TriggerRun(BaseModel):
     type: Literal[
-        "predict", "grade", "backfill", "batch_backfill", "batch_predict", "poisson"
+        "sync", "predict", "grade", "backfill", "batch_backfill", "batch_predict", "poisson"
     ]
     count: int | None = Field(default=None, ge=1, le=104)
 

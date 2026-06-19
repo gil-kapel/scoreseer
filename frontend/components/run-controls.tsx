@@ -7,6 +7,11 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const TYPES = [
+  {
+    value: "sync",
+    label: "Sync + grade",
+    hint: "refresh fixture statuses from the sports API + grade finished matches (free)",
+  },
   { value: "grade", label: "Grade", hint: "score finished matches (free, no LLM)" },
   {
     value: "poisson",

@@ -83,13 +83,41 @@ async def run_predict(trigger: str, *, cap: int | None = None) -> dict:
         )
 
 
-async def run_sync(trigger: str) -> dict:
-    """Sync fixtures + statuses from the (free) sports API. No Claude."""
-    settings = get_settings()
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        provider = build_fixtures_provider(settings, client)
-        async with get_sessionmaker()() as session:
-            return await FixtureSyncService(session, provider).sync()
+async def run_sync(trigger: str, *, cap: int | None = None) -> dict:
+    """Sync fixture statuses from the (free) sports API, then grade newly-finished
+    matches. No Claude. Records a Run so it shows in the admin table."""
+    log = logger.bind(component="run_sync")
+    sm = get_sessionmaker()
+    async with sm() as session:
+        run = Run(type="sync", trigger=trigger, status="running", params={})
+        session.add(run)
+        await session.commit()
+        run_id = run.id
+
+    status = "succeeded"
+    summary: dict = {}
+    try:
+        settings = get_settings()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            provider = build_fixtures_provider(settings, client)
+            async with sm() as session:
+                summary = await FixtureSyncService(session, provider).sync()
+    except Exception as exc:  # noqa: BLE001 — record failure on the run row
+        log.warning("sync.error: {}", exc)
+        summary = {"status": "error", "detail": str(exc)[:300]}
+        status = "failed"
+
+    async with sm() as session:
+        finished = await session.get(Run, run_id)
+        if finished is not None:
+            finished.status = status
+            finished.finished_at = datetime.now(UTC)
+            finished.totals = summary
+            await session.commit()
+
+    if status != "failed":
+        await run_grade(trigger)  # grade matches that just turned finished
+    return summary
 
 
 async def run_grade(trigger: str, *, cap: int | None = None) -> dict:
