@@ -158,20 +158,28 @@ export type RunRead = {
 export type RunItemRead = { fixture_id: string; status: string; detail: string | null };
 export type RunDetail = { run: RunRead; items: RunItemRead[] };
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", headers: backendHeaders() });
+// `revalidate` (seconds) caches the response server-side so most page loads serve
+// from Vercel's CDN instead of hitting the backend (US) -> Neon (Frankfurt) every
+// time — this also masks Render free-tier cold starts. Pass `false` for live data.
+async function get<T>(path: string, revalidate: number | false = 45): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: backendHeaders(),
+    ...(revalidate === false ? { cache: "no-store" } : { next: { revalidate } }),
+  });
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
   return (await res.json()) as T;
 }
 
 export const api = {
   base: API_BASE,
+  // Slow-changing reads — cached ~45s (ISR).
   upcoming: (windowH = 336) => get<FixtureRead[]>(`/api/fixtures/upcoming?window_h=${windowH}`),
   metrics: () => get<DashboardMetrics>(`/api/dashboard/metrics`),
   calibration: () => get<CalibrationView>(`/api/dashboard/calibration`),
-  matchDetail: (id: string) => get<MatchDetail>(`/api/matches/${id}`),
   history: (qs: string) => get<HistoryRow[]>(`/api/history${qs ? `?${qs}` : ""}`),
-  runs: () => get<RunRead[]>(`/api/admin/runs`),
+  // Live reads — never cached (run status, in-flight prediction indicator).
+  matchDetail: (id: string) => get<MatchDetail>(`/api/matches/${id}`, false),
+  runs: () => get<RunRead[]>(`/api/admin/runs`, false),
 };
 
 export async function safe<T>(p: Promise<T>): Promise<{ data: T | null; error: string | null }> {

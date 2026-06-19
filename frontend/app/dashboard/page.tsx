@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, safe } from "@/lib/api";
 import { fixed, pct } from "@/lib/format";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 45; // ISR: serve from CDN, refresh in the background
 
 export default async function DashboardPage() {
   const [{ data: metrics, error }, { data: cal }] = await Promise.all([

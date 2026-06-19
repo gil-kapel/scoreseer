@@ -2,7 +2,7 @@ import { FixtureCard } from "@/components/fixture-card";
 import { Card } from "@/components/ui/card";
 import { api, safe, type FixtureRead } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 45; // ISR: serve from CDN, refresh in the background
 
 function groupByDate(fixtures: FixtureRead[]): [string, FixtureRead[]][] {
   const groups = new Map<string, FixtureRead[]>();

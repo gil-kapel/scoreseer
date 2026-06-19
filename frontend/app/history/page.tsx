@@ -15,7 +15,7 @@ import { api, safe, type HistoryRow } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { fmtKickoff } from "@/lib/format";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 45; // ISR: serve from CDN, refresh in the background
 
 function Row({ r }: { r: HistoryRow }) {
   return (
