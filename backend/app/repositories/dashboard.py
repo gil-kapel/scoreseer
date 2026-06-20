@@ -61,6 +61,22 @@ class DashboardRepository:
         rows = (await self.session.execute(stmt)).all()
         return [(r[0], r[1], r[2], r[3]) for r in rows]
 
+    async def recent_llm_predictions(self, limit: int) -> list[tuple[Prediction, Fixture]]:
+        """Newest OK LLM predictions with an explanation (the Insights feed source)."""
+        stmt = (
+            select(Prediction, Fixture)
+            .join(Fixture, col(Fixture.id) == col(Prediction.fixture_id))
+            .where(
+                col(Prediction.status) == "ok",
+                col(Prediction.model_id).not_in(BASELINE_MODEL_IDS),
+                col(Prediction.explanation) != "",
+            )
+            .order_by(col(Prediction.created_at).desc())
+            .limit(limit * 3)  # over-fetch; the service dedups to one per fixture
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [(r[0], r[1]) for r in rows]
+
     async def team_map(self, ids: set[uuid.UUID]) -> dict[uuid.UUID, Team]:
         if not ids:
             return {}

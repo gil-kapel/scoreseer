@@ -16,6 +16,7 @@ from app.models.schemas import (
     DashboardMetrics,
     EstimatorStats,
     HistoryRow,
+    InsightItem,
     ReliabilityBin,
     StagePoints,
     TrendPoint,
@@ -89,6 +90,36 @@ class DashboardService:
                 )
             )
         return out
+
+    async def insights(self, *, limit: int = 40) -> list[InsightItem]:
+        """Recent LLM analyst notes, one per fixture (latest), newest first."""
+        rows = await self.repo.recent_llm_predictions(limit)
+        seen: set[uuid.UUID] = set()
+        picked: list[tuple] = []
+        for pred, fixture in rows:  # newest first
+            if fixture.id in seen:
+                continue
+            seen.add(fixture.id)
+            picked.append((pred, fixture))
+            if len(picked) >= limit:
+                break
+        ids = {f.home_team_id for _, f in picked} | {f.away_team_id for _, f in picked}
+        teams = await self.repo.team_map(ids)
+        return [
+            InsightItem(
+                fixture_id=fixture.id,
+                home=_name(teams, fixture.home_team_id),
+                away=_name(teams, fixture.away_team_id),
+                kickoff_utc=fixture.kickoff_utc,
+                predicted=f"{pred.home_score}-{pred.away_score}",
+                confidence=pred.match_confidence,
+                explanation=pred.explanation,
+                model_id=pred.model_id,
+                created_at=pred.created_at,
+                played=fixture.status == "finished",
+            )
+            for pred, fixture in picked
+        ]
 
     async def calibration(self) -> CalibrationView:
         rows = _dedup_per_fixture(await self.repo.graded(include_backfill=False, estimator="llm"))

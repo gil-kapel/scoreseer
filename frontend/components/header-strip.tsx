@@ -20,7 +20,7 @@ export function HeaderStrip({ metrics }: { metrics: DashboardMetrics | null }) {
       {/* Brand on mobile (the sidebar that normally shows it is hidden); label on desktop. */}
       <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-wide text-primary text-glow md:hidden">
         <BarChart3 className="h-4 w-4" />
-        ScoreSeer
+        ESTIMATOR 2026
       </span>
       {/* Stats scroll horizontally on a narrow phone instead of wrapping/overflowing. */}
       <div className="flex flex-1 items-center gap-4 overflow-x-auto md:gap-6">

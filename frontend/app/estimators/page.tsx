@@ -1,3 +1,6 @@
+import { FlaskConical } from "lucide-react";
+
+import { EstimatorRadar } from "@/components/charts/estimator-radar";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -40,11 +43,13 @@ export default async function EstimatorsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-xl font-semibold text-fg">Estimators — bake-off</h1>
+        <h1 className="flex items-center gap-2 text-xl font-semibold text-fg">
+          <FlaskConical className="h-5 w-5 text-primary" /> Lab
+        </h1>
         <p className="max-w-xl text-sm text-fg-muted">
-          Every estimator graded on the same matches, hindsight-free. 📊 Poisson, 📈 Elo and a
-          🪙 Naive &ldquo;home wins 1-0&rdquo; floor are free statistical baselines; 🤖 LLM is
-          Claude. Highest value per row is highlighted.
+          Every estimator graded on the same matches, hindsight-free. 📊 Poisson, 📈 Elo, 📐
+          Dixon-Coles and a 🪙 Naive floor are free baselines; 💱 Market is bookmaker odds; 🤖 LLM
+          is Claude. Highest value per row is highlighted.
         </p>
       </header>
 
@@ -66,6 +71,13 @@ export default async function EstimatorsPage() {
                 {runnerUp.estimator}&apos;s {pct(runnerUp.outcome_accuracy)} &amp;{" "}
                 {runnerUp.total_points} pts, over {leader.n_graded} graded matches.
               </div>
+            </Card>
+          ) : null}
+
+          {estimators.length >= 2 ? (
+            <Card className="p-5">
+              <div className="label mb-3">performance vectors · relative</div>
+              <EstimatorRadar estimators={ranked.slice(0, 4)} />
             </Card>
           ) : null}
 

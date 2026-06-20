@@ -124,6 +124,19 @@ export type EstimatorStats = {
   max_points: number;
 };
 
+export type InsightItem = {
+  fixture_id: string;
+  home: string;
+  away: string;
+  kickoff_utc: string;
+  predicted: string;
+  confidence: number;
+  explanation: string;
+  model_id: string;
+  created_at: string;
+  played: boolean;
+};
+
 export type ReliabilityBin = { bucket: string; avg_confidence: number; accuracy: number; n: number };
 export type CalibrationVersion = {
   version: number;
@@ -188,6 +201,7 @@ export const api = {
   upcoming: (windowH = 336) => get<FixtureRead[]>(`/api/fixtures/upcoming?window_h=${windowH}`),
   metrics: () => get<DashboardMetrics>(`/api/dashboard/metrics`),
   estimators: () => get<EstimatorStats[]>(`/api/dashboard/estimators`),
+  insights: (limit = 40) => get<InsightItem[]>(`/api/dashboard/insights?limit=${limit}`),
   calibration: () => get<CalibrationView>(`/api/dashboard/calibration`),
   history: (qs: string) => get<HistoryRow[]>(`/api/history${qs ? `?${qs}` : ""}`),
   // Live reads — never cached (run status, in-flight prediction indicator).

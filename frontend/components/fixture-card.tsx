@@ -4,8 +4,10 @@ import { ConfidenceMeter, ScoreLine } from "@/components/prediction-ui";
 import { StatusChip } from "@/components/status-chip";
 import { TeamFlag } from "@/components/team-flag";
 import { Card } from "@/components/ui/card";
+import { WinProbBar } from "@/components/win-prob-bar";
 import type { FixtureRead } from "@/lib/api";
 import { fmtKickoff } from "@/lib/format";
+import { deriveSplit } from "@/lib/winprob";
 
 /** Column legend for the upcoming list — desktop only (cards stack on mobile, so
  *  headers wouldn't line up there). Widths mirror FixtureCard so labels align. */
@@ -72,6 +74,16 @@ export function FixtureCard({ fixture }: { fixture: FixtureRead }) {
             </div>
           </div>
         </div>
+        {p ? (
+          <div className="mt-2.5">
+            <WinProbBar
+              split={deriveSplit(p.home_score, p.away_score, p.match_confidence)}
+              home={fixture.home.code}
+              away={fixture.away.code}
+              compact
+            />
+          </div>
+        ) : null}
       </Card>
     </Link>
   );

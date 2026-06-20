@@ -198,6 +198,21 @@ class EstimatorStats(BaseModel):
     max_points: int
 
 
+class InsightItem(BaseModel):
+    """One LLM analyst note for the Insights feed."""
+
+    fixture_id: uuid.UUID
+    home: str
+    away: str
+    kickoff_utc: datetime
+    predicted: str
+    confidence: float
+    explanation: str
+    model_id: str
+    created_at: datetime
+    played: bool
+
+
 class DashboardMetrics(BaseModel):
     n_graded: int
     outcome_accuracy: float

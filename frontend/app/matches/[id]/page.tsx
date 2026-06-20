@@ -9,9 +9,11 @@ import { StatusChip } from "@/components/status-chip";
 import { TeamFlag } from "@/components/team-flag";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { WinProbBar } from "@/components/win-prob-bar";
 import { api, safe, type MatchDetail } from "@/lib/api";
 import { estimatorFromModelId } from "@/lib/estimators";
 import { fmtKickoff, pct } from "@/lib/format";
+import { deriveSplit } from "@/lib/winprob";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +64,11 @@ function PredictionPanel({ m }: { m: MatchDetail }) {
             <ScoreLine home={p.home_score} away={p.away_score} size="lg" />
             <ConfidenceMeter value={p.match_confidence} />
           </div>
+          <WinProbBar
+            split={deriveSplit(p.home_score, p.away_score, p.match_confidence)}
+            home={m.fixture.home.code}
+            away={m.fixture.away.code}
+          />
           <div>
             <div className="mb-2 text-xs uppercase tracking-wide text-fg-muted">
               Likely scorers

@@ -108,7 +108,8 @@ class MarketService:
         explanation = (
             "Market: de-vigged bookmaker odds — "
             f"home/draw/away = {pred.p_home:.0%}/{pred.p_draw:.0%}/{pred.p_away:.0%}. "
-            f"Implied {pred.home_goals}–{pred.away_goals} (P({pred.outcome})={pred.confidence:.0%})."
+            f"Implied {pred.home_goals}–{pred.away_goals} "
+            f"(P({pred.outcome})={pred.confidence:.0%})."
         )
         fields = dict(
             snapshot_id=None,

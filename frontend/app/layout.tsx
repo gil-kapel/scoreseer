@@ -7,7 +7,7 @@ import { api, safe } from "@/lib/api";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ScoreSeer",
+  title: "Estimator 2026",
   description: "World Cup 2026 match result estimator — accuracy lab",
 };
 

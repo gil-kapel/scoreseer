@@ -1,17 +1,26 @@
 "use client";
 
-import { BarChart3, CalendarClock, History, Settings2, Swords } from "lucide-react";
+import {
+  BarChart3,
+  FlaskConical,
+  History,
+  LayoutGrid,
+  Lightbulb,
+  Network,
+  Settings2,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/cn";
 
 const NAV = [
-  { href: "/", label: "Upcoming", Icon: CalendarClock },
-  { href: "/dashboard", label: "Dashboard", Icon: BarChart3 },
-  { href: "/estimators", label: "Estimators", Icon: Swords },
-  { href: "/history", label: "History", Icon: History },
-  { href: "/admin/runs", label: "Admin", Icon: Settings2 },
+  { href: "/", label: "Dashboard", Icon: LayoutGrid, mobile: true },
+  { href: "/forecast", label: "Forecast", Icon: Network, mobile: true },
+  { href: "/estimators", label: "Lab", Icon: FlaskConical, mobile: true },
+  { href: "/insights", label: "Insights", Icon: Lightbulb, mobile: true },
+  { href: "/history", label: "History", Icon: History, mobile: false },
+  { href: "/admin/runs", label: "Admin", Icon: Settings2, mobile: true },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -25,9 +34,9 @@ export function Sidebar() {
       <div className="border-b border-border px-4 py-4">
         <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-primary text-glow">
           <BarChart3 className="h-4 w-4" />
-          ScoreSeer
+          ESTIMATOR 2026
         </div>
-        <div className="label mt-1.5">World Cup 2026 · accuracy lab</div>
+        <div className="label mt-1.5">World Cup · accuracy lab</div>
       </div>
       <nav className="flex flex-col gap-0.5 p-2">
         {NAV.map(({ href, label, Icon }) => {
@@ -56,9 +65,10 @@ export function Sidebar() {
 /** Fixed bottom tab bar — the mobile replacement for the sidebar (thumb-reachable). */
 export function MobileNav() {
   const pathname = usePathname();
+  const items = NAV.filter((n) => n.mobile);
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-      {NAV.map(({ href, label, Icon }) => {
+      {items.map(({ href, label, Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link
