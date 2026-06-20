@@ -7,6 +7,24 @@ import { Card } from "@/components/ui/card";
 import type { FixtureRead } from "@/lib/api";
 import { fmtKickoff } from "@/lib/format";
 
+/** Column legend for the upcoming list — desktop only (cards stack on mobile, so
+ *  headers wouldn't line up there). Widths mirror FixtureCard so labels align. */
+export function FixtureListHeader() {
+  return (
+    <div className="hidden px-4 text-[10px] font-medium uppercase tracking-wide text-fg-muted sm:flex sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex items-center sm:gap-4">
+        <span className="w-24 shrink-0">Group</span>
+        <span>Match</span>
+      </div>
+      <div className="flex items-center sm:gap-5">
+        <span>Prediction · conf.</span>
+        <span className="w-28 text-right">Kickoff</span>
+        <span>Status</span>
+      </div>
+    </div>
+  );
+}
+
 export function FixtureCard({ fixture }: { fixture: FixtureRead }) {
   const p = fixture.prediction;
   return (

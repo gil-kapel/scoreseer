@@ -1,4 +1,4 @@
-import { FixtureCard } from "@/components/fixture-card";
+import { FixtureCard, FixtureListHeader } from "@/components/fixture-card";
 import { Card } from "@/components/ui/card";
 import { api, safe, type FixtureRead } from "@/lib/api";
 
@@ -32,19 +32,22 @@ export default async function UpcomingPage() {
           No matches in the prediction window yet.
         </Card>
       ) : (
-        <div className="space-y-6">
-          {groupByDate(data).map(([day, fixtures]) => (
-            <section key={day} className="space-y-2">
-              <h2 className="nums text-xs font-medium uppercase tracking-wide text-fg-muted">
-                {day}
-              </h2>
-              <div className="space-y-2">
-                {fixtures.map((f) => (
-                  <FixtureCard key={f.id} fixture={f} />
-                ))}
-              </div>
-            </section>
-          ))}
+        <div className="space-y-3">
+          <FixtureListHeader />
+          <div className="space-y-6">
+            {groupByDate(data).map(([day, fixtures]) => (
+              <section key={day} className="space-y-2">
+                <h2 className="nums text-xs font-medium uppercase tracking-wide text-fg-muted">
+                  {day}
+                </h2>
+                <div className="space-y-2">
+                  {fixtures.map((f) => (
+                    <FixtureCard key={f.id} fixture={f} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         </div>
       )}
     </div>
