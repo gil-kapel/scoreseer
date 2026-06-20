@@ -13,7 +13,8 @@ from sqlmodel import col
 
 from app.config import logger
 from app.estimators import MatchResult, estimate_ratings, predict_elo
-from app.models import Fixture, Prediction, Result
+from app.estimators.elo_seeds import DEFAULT_SEED, ELO_SEEDS
+from app.models import Fixture, Prediction, Result, Team
 from app.repositories import PredictionRepository
 
 ELO_MODEL_ID = "elo-v1"
@@ -29,7 +30,7 @@ class EloService:
     async def predict_fixture(self, fixture: Fixture) -> Prediction:
         log = logger.bind(component="EloService", fixture_id=str(fixture.id))
         results = await self._prior_results(fixture.kickoff_utc)
-        ratings = estimate_ratings(results)
+        ratings = estimate_ratings(results, initial=await self._seed_ratings())
         pred = predict_elo(
             str(fixture.home_team_id),
             str(fixture.away_team_id),
@@ -89,6 +90,11 @@ class EloService:
             await self.session.flush()
             return existing
         return await self.repo.create_prediction(fixture_id=fixture.id, **fields)
+
+    async def _seed_ratings(self) -> dict[str, float]:
+        """Pre-tournament strength per team (team_id -> Elo) so the model isn't cold."""
+        teams = (await self.session.execute(select(Team))).scalars().all()
+        return {str(t.id): ELO_SEEDS.get(t.fifa_code, DEFAULT_SEED) for t in teams}
 
     async def _prior_results(self, before: datetime) -> list[MatchResult]:
         rows = (

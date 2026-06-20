@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
+from app.estimators import BASELINE_MODEL_IDS
 from app.models import Fixture, Grade, Prediction, Result, Team
 from app.models.schemas import (
     FixtureRead,
@@ -52,9 +53,11 @@ class FixtureService:
         fixture_read = self._to_read(fixture, teams, preds)
 
         repo = PredictionRepository(self.session)
-        # latest_ok (not latest): a failed or in-progress re-predict must never hide
-        # the last good estimate — otherwise the panel looks "empty" mid-run.
-        pred = await repo.latest_ok(fixture.id)
+        # Feature the real LLM prediction (its scoreline, confidence, explanation, and
+        # web-search evidence). Baselines are regenerated often, so the newest overall
+        # would otherwise be a Poisson/Elo/Naive row — a stub blurb with no evidence.
+        all_ok = await repo.all_ok(fixture.id)
+        pred = _primary(all_ok)
         sources: list = []
         quality: str | None = None
         if pred is not None and pred.snapshot_id is not None:
@@ -70,8 +73,8 @@ class FixtureService:
             if pred is not None
             else None
         )
-        # All estimators' predictions for the side-by-side (LLM + Poisson).
-        estimators = [_to_prediction_read(p, fixture) for p in await repo.all_ok(fixture.id)]
+        # All estimators' predictions for the side-by-side (LLM + the baselines).
+        estimators = [_to_prediction_read(p, fixture) for p in all_ok]
         return MatchDetail(
             fixture=fixture_read,
             prediction=_to_prediction_read(pred, fixture) if pred else None,
@@ -94,7 +97,9 @@ class FixtureService:
     async def _prediction_map(
         self, fixture_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, Prediction]:
-        """Latest OK prediction per fixture (one query, newest-first dedup)."""
+        """Featured OK prediction per fixture: the latest LLM one, else the latest
+        baseline (so the list shows your real prediction, not a freshly-regenerated
+        Poisson/Elo/Naive)."""
         if not fixture_ids:
             return {}
         rows = (
@@ -105,8 +110,12 @@ class FixtureService:
             )
         ).scalars().all()
         out: dict[uuid.UUID, Prediction] = {}
-        for p in rows:
-            out.setdefault(p.fixture_id, p)  # first seen = newest
+        fallback: dict[uuid.UUID, Prediction] = {}
+        for p in rows:  # newest first
+            bucket = fallback if p.model_id in BASELINE_MODEL_IDS else out
+            bucket.setdefault(p.fixture_id, p)
+        for fid, p in fallback.items():
+            out.setdefault(fid, p)  # a baseline only when no LLM prediction exists
         return out
 
     @staticmethod
@@ -146,6 +155,16 @@ class FixtureService:
             prediction_status="predicted" if pred is not None else "scheduled",
             prediction=summary,
         )
+
+
+def _primary(predictions: list[Prediction]) -> Prediction | None:
+    """The prediction to feature (scoreline, confidence, explanation, evidence): the
+    real LLM one if any exists, else the most recent baseline. Baselines are
+    regenerated often, so without this the panel would show a baseline's stub text."""
+    if not predictions:
+        return None
+    llm = [p for p in predictions if p.model_id not in BASELINE_MODEL_IDS]
+    return max(llm or predictions, key=lambda p: p.created_at)
 
 
 def _to_prediction_read(pred: Prediction, fixture: Fixture) -> PredictionRead:

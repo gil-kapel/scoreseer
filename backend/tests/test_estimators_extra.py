@@ -21,6 +21,14 @@ def test_elo_bigger_win_moves_rating_more() -> None:
     assert (big["C"] - 1500.0) > (small["A"] - 1500.0)
 
 
+def test_elo_seed_favors_stronger_team_when_cold() -> None:
+    # No results yet — pre-tournament seeds alone should favor the stronger side.
+    ratings = estimate_ratings([], initial={"BRA": 2030.0, "CUW": 1500.0})
+    pred = predict_elo("BRA", "CUW", ratings)
+    assert pred.outcome == "home"
+    assert pred.home_goals > pred.away_goals
+
+
 def test_elo_stronger_team_predicted_to_win() -> None:
     ratings = estimate_ratings([MatchResult("A", f"T{i}", 3, 0) for i in range(4)])
     pred = predict_elo("A", "Z", ratings)  # Z unseen (1500); A is strong

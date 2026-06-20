@@ -60,12 +60,17 @@ def _goal_multiplier(goal_diff: int) -> float:
 def estimate_ratings(
     results: list[MatchResult],
     *,
+    initial: dict[str, float] | None = None,
     base: float = BASE_RATING,
     k: float = K_FACTOR,
     home_field: float = HOME_FIELD,
 ) -> dict[str, float]:
-    """Sequential Elo over results in CHRONOLOGICAL order (caller must sort)."""
-    ratings: dict[str, float] = {}
+    """Sequential Elo over results in CHRONOLOGICAL order (caller must sort).
+
+    `initial` seeds starting ratings (team_id -> rating) so teams begin at their
+    pre-tournament strength rather than a flat `base`; teams not in it use `base`.
+    """
+    ratings: dict[str, float] = dict(initial) if initial else {}
     for r in results:
         rh = ratings.get(r.home_id, base)
         ra = ratings.get(r.away_id, base)
