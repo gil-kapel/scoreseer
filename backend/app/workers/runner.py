@@ -14,6 +14,7 @@ from app.estimators import BASELINE_MODEL_IDS
 from app.models import Fixture, Grade, Prediction, Run
 from app.providers.claude_batch import ClaudeBatchPredictor
 from app.providers.claude_factory import claude_adapters
+from app.providers.odds import OddsProvider
 from app.providers.results import build_results_provider
 from app.providers.sports_api import build_fixtures_provider
 from app.services import (
@@ -22,6 +23,7 @@ from app.services import (
     DixonColesService,
     EloService,
     FixtureSyncService,
+    MarketService,
     NaiveService,
     PoissonService,
     PredictionService,
@@ -192,6 +194,7 @@ async def run_baselines(trigger: str, *, cap: int | None = None) -> dict:
             profile = await CalibrationService(session).recompute()
             if profile is not None:
                 await session.commit()
+        await _run_market(cap)  # optional, gated on the_odds_api_key (forward-only)
     except Exception as exc:  # noqa: BLE001 — record failure on the run row
         log.warning("baselines.error: {}", exc)
         status = "failed"
@@ -205,6 +208,24 @@ async def run_baselines(trigger: str, *, cap: int | None = None) -> dict:
             await session.commit()
     log.info("run_baselines.done fixtures={} status={}", upserted, status)
     return {"status": status, "upserted": upserted}
+
+
+async def _run_market(cap: int | None) -> None:
+    """Generate Market predictions for upcoming fixtures from the-odds-api. No-op
+    without a key; fail-safe (never breaks the baselines run)."""
+    settings = get_settings()
+    if not settings.the_odds_api_key:
+        logger.bind(component="run_baselines").info("market.skip no the_odds_api_key")
+        return
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            provider = OddsProvider(settings.the_odds_api_key, client)
+            async with get_sessionmaker()() as session:
+                summary = await MarketService(session, provider).run(cap=cap)
+                await session.commit()
+        logger.bind(component="run_baselines").info("market.done {}", summary)
+    except Exception as exc:  # noqa: BLE001 — market is optional, don't fail the run
+        logger.bind(component="run_baselines").warning("market.error: {}", exc)
 
 
 async def _run_batch(trigger: str, cap: int | None, *, forward: bool, run_type: str) -> dict:

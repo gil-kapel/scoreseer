@@ -6,11 +6,13 @@ from app.estimators import (
     estimate_strengths_seeded,
     predict_dc,
     predict_elo,
+    predict_market,
     predict_naive,
     seed_factors,
 )
 from app.estimators.dixon_coles import _tau
 from app.estimators.elo import _consistent_scoreline
+from app.services.market_service import _norm
 
 
 def test_naive_is_constant_home_win() -> None:
@@ -88,3 +90,24 @@ def test_dc_tau_lifts_draws_trims_narrow_wins() -> None:
     assert _tau(1, 0, 1.5, 1.2, -0.13) < 1.0
     assert _tau(0, 1, 1.5, 1.2, -0.13) < 1.0
     assert _tau(2, 2, 1.5, 1.2, -0.13) == 1.0  # untouched outside the low-score cells
+
+
+def test_market_favorite_predicted_to_win() -> None:
+    pred = predict_market(0.70, 0.20, 0.10)
+    assert pred.outcome == "home"
+    assert pred.home_goals > pred.away_goals
+    assert pred.confidence == pred.p_home
+    assert abs(pred.p_home + pred.p_draw + pred.p_away - 1.0) < 1e-9
+
+
+def test_market_draw_when_draw_is_likeliest() -> None:
+    pred = predict_market(0.25, 0.50, 0.25)
+    assert pred.outcome == "draw"
+    assert pred.home_goals == pred.away_goals
+
+
+def test_market_name_normalization_aliases() -> None:
+    assert _norm("Ivory Coast") == _norm("Côte d'Ivoire")
+    assert _norm("Czechia") == _norm("Czech Republic")
+    assert _norm("United States") == _norm("USA")
+    assert _norm("Curaçao") == "curacao"

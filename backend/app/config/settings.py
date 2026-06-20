@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # --- Sports data providers (authoritative fixtures + results). Use BOTH, free-first. ---
     football_data_api_key: str = Field(default="", description="football-data.org token (free).")
     api_football_key: str = Field(default="", description="API-Football key (free).")
+    the_odds_api_key: str = Field(
+        default="", description="the-odds-api.com key (free) — enables the Market estimator."
+    )
     sports_provider_order: str = Field(
         default="football_data,api_football",
         description="Comma-separated free-first provider preference order.",
@@ -92,6 +95,7 @@ class Settings(BaseSettings):
             "anthropic_api_key": mask(self.anthropic_api_key),
             "football_data_api_key": mask(self.football_data_api_key),
             "api_football_key": mask(self.api_football_key),
+            "the_odds_api_key": mask(self.the_odds_api_key),
             "api_token": mask(self.api_token),
             "auth_enabled": bool(self.api_token),
             "prediction_window_hours": self.prediction_window_hours,

@@ -6,6 +6,7 @@ from app.services.elo_service import EloService
 from app.services.fixture_service import FixtureService
 from app.services.fixture_sync_service import FixtureSyncService
 from app.services.grading_service import GradingService
+from app.services.market_service import MarketService
 from app.services.naive_service import NaiveService
 from app.services.poisson_service import PoissonService
 from app.services.prediction_service import PredictionService
@@ -19,6 +20,7 @@ __all__ = [
     "EloService",
     "NaiveService",
     "DixonColesService",
+    "MarketService",
     "BatchBackfillService",
     "GradingService",
     "RunService",
