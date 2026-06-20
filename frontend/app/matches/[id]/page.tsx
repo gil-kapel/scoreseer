@@ -10,6 +10,7 @@ import { TeamFlag } from "@/components/team-flag";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { api, safe, type MatchDetail } from "@/lib/api";
+import { estimatorFromModelId } from "@/lib/estimators";
 import { fmtKickoff, pct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -175,7 +176,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
               <div key={e.id} className="rounded-md border border-border p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-fg">
-                    {e.model_id === "poisson-v1" ? "📊 Poisson" : "🤖 LLM"}
+                    {estimatorFromModelId(e.model_id).icon} {estimatorFromModelId(e.model_id).name}
                   </span>
                   <ScoreLine home={e.home_score} away={e.away_score} />
                 </div>

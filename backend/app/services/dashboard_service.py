@@ -145,8 +145,11 @@ class DashboardService:
         return out
 
 
+_ESTIMATOR_NAMES = {"poisson-v1": "Poisson", "elo-v1": "Elo", "naive-v1": "Naive"}
+
+
 def _estimator_name(model_id: str) -> str:
-    return "Poisson" if model_id == "poisson-v1" else "LLM"
+    return _ESTIMATOR_NAMES.get(model_id, "LLM")
 
 
 def _dedup_per_fixture(rows: list[GradedRow]) -> list[GradedRow]:

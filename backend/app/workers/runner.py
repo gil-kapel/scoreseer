@@ -10,6 +10,7 @@ from sqlmodel import col
 
 from app.config import get_settings, logger
 from app.db import get_sessionmaker
+from app.estimators import BASELINE_MODEL_IDS
 from app.models import Fixture, Grade, Prediction, Run
 from app.providers.claude_batch import ClaudeBatchPredictor
 from app.providers.claude_factory import claude_adapters
@@ -18,12 +19,13 @@ from app.providers.sports_api import build_fixtures_provider
 from app.services import (
     BatchBackfillService,
     CalibrationService,
+    EloService,
     FixtureSyncService,
+    NaiveService,
     PoissonService,
     PredictionService,
     RunService,
 )
-from app.services.poisson_service import POISSON_MODEL_ID
 
 # Fixtures with an in-flight per-match predict — surfaced to the UI so it can show
 # a "Predicting…" indicator that survives a page refresh (in-process; resets on restart).
@@ -144,16 +146,17 @@ async def run_backfill(trigger: str, *, cap: int | None = None) -> dict:
             )
 
 
-async def run_poisson(trigger: str, *, cap: int | None = None) -> dict:
-    """Regenerate the free Poisson baseline for every fixture (upsert + regrade + calibrate).
+async def run_baselines(trigger: str, *, cap: int | None = None) -> dict:
+    """Regenerate every free statistical baseline (Poisson · Elo · Naive) for every
+    fixture (upsert + regrade + calibrate).
 
     No Claude. Records a Run row, then grades the refreshed predictions and recomputes
     calibration. Safe to re-run after a model change.
     """
-    log = logger.bind(component="run_poisson")
+    log = logger.bind(component="run_baselines")
     sm = get_sessionmaker()
     async with sm() as session:
-        run = Run(type="poisson", trigger=trigger, status="running", params={"cap": cap})
+        run = Run(type="baselines", trigger=trigger, status="running", params={"cap": cap})
         session.add(run)
         await session.commit()
         run_id = run.id
@@ -167,26 +170,28 @@ async def run_poisson(trigger: str, *, cap: int | None = None) -> dict:
                 stmt = stmt.limit(cap)
             fixtures = (await session.execute(stmt)).scalars().all()
             for fixture in fixtures:
-                await PoissonService(session).predict_fixture(fixture)  # upsert in place
+                await PoissonService(session).predict_fixture(fixture)  # each upserts in place
+                await EloService(session).predict_fixture(fixture)
+                await NaiveService(session).predict_fixture(fixture)
                 upserted += 1
-            # Drop stale Poisson grades (scored the old scoreline) so they re-grade.
+            # Drop stale baseline grades (scored the old scoreline) so they re-grade.
             await session.execute(
                 delete(Grade).where(
                     col(Grade.prediction_id).in_(
                         select(col(Prediction.id)).where(
-                            col(Prediction.model_id) == POISSON_MODEL_ID
+                            col(Prediction.model_id).in_(BASELINE_MODEL_IDS)
                         )
                     )
                 )
             )
             await session.commit()
-        await run_grade(trigger, cap=200)  # grade the refreshed Poisson (+ any ungraded)
+        await run_grade(trigger, cap=500)  # grade the refreshed baselines (+ any ungraded)
         async with sm() as session:
             profile = await CalibrationService(session).recompute()
             if profile is not None:
                 await session.commit()
     except Exception as exc:  # noqa: BLE001 — record failure on the run row
-        log.warning("poisson.error: {}", exc)
+        log.warning("baselines.error: {}", exc)
         status = "failed"
 
     async with sm() as session:
@@ -196,7 +201,7 @@ async def run_poisson(trigger: str, *, cap: int | None = None) -> dict:
             finished.finished_at = datetime.now(UTC)
             finished.totals = {"succeeded": upserted, "skipped": 0, "failed": 0}
             await session.commit()
-    log.info("run_poisson.done upserted={} status={}", upserted, status)
+    log.info("run_baselines.done fixtures={} status={}", upserted, status)
     return {"status": status, "upserted": upserted}
 
 

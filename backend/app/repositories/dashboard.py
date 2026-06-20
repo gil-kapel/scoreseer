@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
+from app.estimators import BASELINE_MODEL_IDS
 from app.models import Fixture, Grade, Prediction, Result, Team
 
 GradedRow = tuple[Fixture, Prediction, Result, Grade]
@@ -28,8 +29,8 @@ class DashboardRepository:
 
         `include_backfill=False` drops HINDSIGHT predictions (the web-search backfill
         that saw the result); the honest as-of batch-LLM still counts.
-        `estimator` filters to "poisson" or "llm" (the LLM estimator = everything that
-        isn't the Poisson baseline).
+        `estimator="llm"` = every model that ISN'T a statistical baseline (Poisson /
+        Elo / Naive); any other value filters to that exact model_id.
         """
         stmt = (
             select(Fixture, Prediction, Result, Grade)
@@ -45,10 +46,10 @@ class DashboardRepository:
             stmt = stmt.where(
                 col(Prediction.is_backfill).is_(False) | col(Prediction.model_id).like("%batch%")
             )
-        if estimator == "poisson":
-            stmt = stmt.where(col(Prediction.model_id) == "poisson-v1")
-        elif estimator == "llm":
-            stmt = stmt.where(col(Prediction.model_id) != "poisson-v1")
+        if estimator == "llm":
+            stmt = stmt.where(col(Prediction.model_id).not_in(BASELINE_MODEL_IDS))
+        elif estimator is not None:
+            stmt = stmt.where(col(Prediction.model_id) == estimator)
         if stage:
             stmt = stmt.where(col(Fixture.stage) == stage)
         if outcome == "hit":

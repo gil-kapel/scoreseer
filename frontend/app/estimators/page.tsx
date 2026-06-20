@@ -8,6 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api, safe, type EstimatorStats } from "@/lib/api";
+import { estimatorIcon } from "@/lib/estimators";
 import { fixed, pct } from "@/lib/format";
 
 export const revalidate = 45;
@@ -27,9 +28,7 @@ const METRICS: Metric[] = [
   { label: "Conf. Brier", hint: "lower is better", fmt: (e) => fixed(e.confidence_brier, 3), score: (e) => -e.confidence_brier },
 ];
 
-function ICON(name: string) {
-  return name === "Poisson" ? "📊" : "🤖";
-}
+const ICON = estimatorIcon;
 
 export default async function EstimatorsPage() {
   const { data, error } = await safe(api.estimators());
@@ -43,8 +42,9 @@ export default async function EstimatorsPage() {
       <header>
         <h1 className="text-xl font-semibold text-fg">Estimators — bake-off</h1>
         <p className="max-w-xl text-sm text-fg-muted">
-          Both estimators graded on the same matches, hindsight-free. Poisson is the free
-          statistical baseline; the LLM is Claude. Highest value per row is highlighted.
+          Every estimator graded on the same matches, hindsight-free. 📊 Poisson, 📈 Elo and a
+          🪙 Naive &ldquo;home wins 1-0&rdquo; floor are free statistical baselines; 🤖 LLM is
+          Claude. Highest value per row is highlighted.
         </p>
       </header>
 

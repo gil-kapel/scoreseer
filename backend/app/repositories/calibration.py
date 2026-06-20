@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col
 
+from app.estimators import BASELINE_MODEL_IDS
 from app.models import CalibrationProfile, Grade, Prediction, Result
 
 
@@ -42,16 +43,22 @@ class CalibrationRepository:
         return profile
 
     async def load_graded(self) -> list[tuple[Prediction, Result, Grade]]:
-        """Every (prediction, final result, grade) triple — the calibration evidence.
+        """Every LLM (prediction, final result, grade) triple — the calibration evidence.
 
-        Backfill (hindsight) predictions are excluded so they can't poison the loop.
+        Calibration tunes the LLM prompt, so backfill (hindsight) predictions AND the
+        statistical baselines (Poisson / Elo / Naive) are excluded — only real LLM
+        predictions may feed the loop.
         """
         rows = (
             await self.session.execute(
                 select(Prediction, Result, Grade)
                 .join(Grade, col(Grade.prediction_id) == col(Prediction.id))
                 .join(Result, col(Result.fixture_id) == col(Grade.fixture_id))
-                .where(col(Result.status) == "final", col(Prediction.is_backfill).is_(False))
+                .where(
+                    col(Result.status) == "final",
+                    col(Prediction.is_backfill).is_(False),
+                    col(Prediction.model_id).not_in(BASELINE_MODEL_IDS),
+                )
             )
         ).all()
         return [(row[0], row[1], row[2]) for row in rows]

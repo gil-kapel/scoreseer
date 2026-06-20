@@ -15,9 +15,9 @@ const TYPES = [
   },
   { value: "grade", label: "Grade", hint: "score finished matches (free, no LLM)" },
   {
-    value: "poisson",
-    label: "Regenerate Poisson",
-    hint: "rebuild + regrade the free Poisson baseline (no Claude)",
+    value: "baselines",
+    label: "Regenerate baselines",
+    hint: "rebuild + regrade the free Poisson · Elo · Naive baselines (no Claude)",
   },
   {
     value: "batch_predict",
