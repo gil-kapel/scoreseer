@@ -19,6 +19,7 @@ from app.providers.sports_api import build_fixtures_provider
 from app.services import (
     BatchBackfillService,
     CalibrationService,
+    DixonColesService,
     EloService,
     FixtureSyncService,
     NaiveService,
@@ -172,6 +173,7 @@ async def run_baselines(trigger: str, *, cap: int | None = None) -> dict:
             for fixture in fixtures:
                 await PoissonService(session).predict_fixture(fixture)  # each upserts in place
                 await EloService(session).predict_fixture(fixture)
+                await DixonColesService(session).predict_fixture(fixture)
                 await NaiveService(session).predict_fixture(fixture)
                 upserted += 1
             # Drop stale baseline grades (scored the old scoreline) so they re-grade.

@@ -145,7 +145,13 @@ class DashboardService:
         return out
 
 
-_ESTIMATOR_NAMES = {"poisson-v1": "Poisson", "elo-v1": "Elo", "naive-v1": "Naive"}
+_ESTIMATOR_NAMES = {
+    "poisson-v1": "Poisson",
+    "elo-v1": "Elo",
+    "naive-v1": "Naive",
+    "dc-v1": "Dixon-Coles",
+    "market-v1": "Market",
+}
 
 
 def _estimator_name(model_id: str) -> str:

@@ -1,6 +1,7 @@
 from app.services.batch_backfill_service import BatchBackfillService
 from app.services.calibration_service import CalibrationService
 from app.services.dashboard_service import DashboardService
+from app.services.dixon_coles_service import DixonColesService
 from app.services.elo_service import EloService
 from app.services.fixture_service import FixtureService
 from app.services.fixture_sync_service import FixtureSyncService
@@ -17,6 +18,7 @@ __all__ = [
     "PoissonService",
     "EloService",
     "NaiveService",
+    "DixonColesService",
     "BatchBackfillService",
     "GradingService",
     "RunService",

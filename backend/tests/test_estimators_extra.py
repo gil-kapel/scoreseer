@@ -1,6 +1,15 @@
-"""Unit tests for the Elo + Naive baselines (pure functions, no DB)."""
+"""Unit tests for the Elo + Naive + Dixon-Coles baselines (pure functions, no DB)."""
 
-from app.estimators import MatchResult, estimate_ratings, predict_elo, predict_naive
+from app.estimators import (
+    MatchResult,
+    estimate_ratings,
+    estimate_strengths_seeded,
+    predict_dc,
+    predict_elo,
+    predict_naive,
+    seed_factors,
+)
+from app.estimators.dixon_coles import _tau
 from app.estimators.elo import _consistent_scoreline
 
 
@@ -54,3 +63,28 @@ def test_consistent_scoreline_enforces_winner() -> None:
     h, a = _consistent_scoreline("away", 0.2, 3.0, 8)
     assert a > h
     assert _consistent_scoreline("draw", 1.4, 0.6, 8) == (1, 1)
+
+
+def test_seed_factors_stronger_team_attacks_more_defends_better() -> None:
+    s_atk, s_def = seed_factors(2030.0)  # strong
+    w_atk, w_def = seed_factors(1500.0)  # weak
+    assert s_atk > w_atk  # stronger scores more
+    assert s_def < w_def  # stronger concedes less
+
+
+def test_dc_seeded_favors_stronger_team_when_cold() -> None:
+    seed_attack = {"BRA": 1.4, "CUW": 0.75}
+    seed_defense = {"BRA": 0.72, "CUW": 1.34}
+    strengths, avg = estimate_strengths_seeded([], seed_attack, seed_defense)
+    pred = predict_dc("BRA", "CUW", strengths, avg)
+    assert pred.outcome == "home"
+    assert pred.home_goals >= pred.away_goals
+    assert abs(pred.p_home + pred.p_draw + pred.p_away - 1.0) < 1e-9
+
+
+def test_dc_tau_lifts_draws_trims_narrow_wins() -> None:
+    # rho < 0: 1-1 boosted (>1), 1-0 / 0-1 trimmed (<1), 0-0 boosted.
+    assert _tau(1, 1, 1.5, 1.2, -0.13) > 1.0
+    assert _tau(1, 0, 1.5, 1.2, -0.13) < 1.0
+    assert _tau(0, 1, 1.5, 1.2, -0.13) < 1.0
+    assert _tau(2, 2, 1.5, 1.2, -0.13) == 1.0  # untouched outside the low-score cells
