@@ -1,3 +1,5 @@
+import { BarChart3 } from "lucide-react";
+
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { DashboardMetrics } from "@/lib/api";
 import { fixed, pct } from "@/lib/format";
@@ -16,7 +18,10 @@ export function HeaderStrip({ metrics }: { metrics: DashboardMetrics | null }) {
   return (
     <div className="flex items-center gap-3 border-b border-border bg-surface px-4 py-2 md:gap-6 md:px-6 md:py-2.5">
       {/* Brand on mobile (the sidebar that normally shows it is hidden); label on desktop. */}
-      <span className="shrink-0 text-sm font-semibold text-fg md:hidden">ScoreSeer</span>
+      <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold tracking-wide text-primary text-glow md:hidden">
+        <BarChart3 className="h-4 w-4" />
+        ScoreSeer
+      </span>
       {/* Stats scroll horizontally on a narrow phone instead of wrapping/overflowing. */}
       <div className="flex flex-1 items-center gap-4 overflow-x-auto md:gap-6">
         <span className="hidden shrink-0 text-xs font-semibold text-fg-muted md:inline">

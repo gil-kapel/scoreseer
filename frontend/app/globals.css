@@ -5,38 +5,38 @@
    token names (background/card/muted/primary/...) so shadcn/ui components and
    the bespoke components share one analyst-dark palette. */
 @theme {
-  /* App-semantic */
-  --color-bg: oklch(0.17 0.01 250);
-  --color-surface: oklch(0.21 0.012 250);
-  --color-surface-2: oklch(0.25 0.014 250);
-  --color-border: oklch(0.3 0.012 250);
-  --color-fg: oklch(0.96 0.01 250);
-  --color-fg-muted: oklch(0.72 0.012 250);
-  --color-primary: oklch(0.7 0.16 230);
-  --color-success: oklch(0.74 0.17 150);
+  /* App-semantic — "Estimator" near-black + neon-green, blue as the secondary accent. */
+  --color-bg: oklch(0.16 0.012 180);
+  --color-surface: oklch(0.2 0.014 185);
+  --color-surface-2: oklch(0.24 0.016 185);
+  --color-border: oklch(0.31 0.016 185);
+  --color-fg: oklch(0.97 0.006 180);
+  --color-fg-muted: oklch(0.68 0.016 185);
+  --color-primary: oklch(0.84 0.2 152);
+  --color-success: oklch(0.84 0.2 152);
   --color-danger: oklch(0.66 0.2 25);
   --color-warning: oklch(0.8 0.15 85);
-  --color-info: oklch(0.72 0.13 230);
-  --color-neutral: oklch(0.6 0.01 250);
+  --color-info: oklch(0.7 0.15 250);
+  --color-neutral: oklch(0.6 0.012 185);
 
   /* shadcn/ui token names → same palette */
-  --color-background: oklch(0.17 0.01 250);
-  --color-foreground: oklch(0.96 0.01 250);
-  --color-card: oklch(0.21 0.012 250);
-  --color-card-foreground: oklch(0.96 0.01 250);
-  --color-popover: oklch(0.25 0.014 250);
-  --color-popover-foreground: oklch(0.96 0.01 250);
-  --color-primary-foreground: oklch(0.16 0.01 250);
-  --color-secondary: oklch(0.25 0.014 250);
-  --color-secondary-foreground: oklch(0.96 0.01 250);
-  --color-muted: oklch(0.25 0.014 250);
-  --color-muted-foreground: oklch(0.72 0.012 250);
-  --color-accent: oklch(0.25 0.014 250);
-  --color-accent-foreground: oklch(0.96 0.01 250);
+  --color-background: oklch(0.16 0.012 180);
+  --color-foreground: oklch(0.97 0.006 180);
+  --color-card: oklch(0.2 0.014 185);
+  --color-card-foreground: oklch(0.97 0.006 180);
+  --color-popover: oklch(0.24 0.016 185);
+  --color-popover-foreground: oklch(0.97 0.006 180);
+  --color-primary-foreground: oklch(0.18 0.03 160);
+  --color-secondary: oklch(0.24 0.016 185);
+  --color-secondary-foreground: oklch(0.97 0.006 180);
+  --color-muted: oklch(0.24 0.016 185);
+  --color-muted-foreground: oklch(0.68 0.016 185);
+  --color-accent: oklch(0.24 0.016 185);
+  --color-accent-foreground: oklch(0.97 0.006 180);
   --color-destructive: oklch(0.66 0.2 25);
-  --color-destructive-foreground: oklch(0.96 0.01 250);
-  --color-input: oklch(0.3 0.012 250);
-  --color-ring: oklch(0.7 0.16 230);
+  --color-destructive-foreground: oklch(0.97 0.006 180);
+  --color-input: oklch(0.31 0.016 185);
+  --color-ring: oklch(0.84 0.2 152);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
@@ -53,7 +53,7 @@
   --color-border: oklch(0.88 0.008 250);
   --color-fg: oklch(0.23 0.02 250);
   --color-fg-muted: oklch(0.48 0.015 250);
-  --color-primary: oklch(0.55 0.17 250);
+  --color-primary: oklch(0.55 0.16 152);
   --color-success: oklch(0.52 0.15 150);
   --color-danger: oklch(0.55 0.2 25);
   --color-warning: oklch(0.62 0.13 75);
@@ -76,7 +76,7 @@
   --color-destructive: oklch(0.55 0.2 25);
   --color-destructive-foreground: oklch(0.99 0.003 250);
   --color-input: oklch(0.88 0.008 250);
-  --color-ring: oklch(0.55 0.17 250);
+  --color-ring: oklch(0.55 0.16 152);
 }
 
 @layer base {
@@ -95,5 +95,23 @@
   .nums {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* Neon-green glow for the brand + active/live accents (the mockup signature). */
+  .glow-primary {
+    box-shadow: 0 0 18px -2px color-mix(in oklch, var(--color-primary) 55%, transparent);
+  }
+  .text-glow {
+    text-shadow: 0 0 14px color-mix(in oklch, var(--color-primary) 60%, transparent);
+  }
+  /* Small, letter-spaced uppercase labels (the mockup uses these everywhere). */
+  .label {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    color: var(--color-fg-muted);
   }
 }

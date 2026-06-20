@@ -23,8 +23,11 @@ export function Sidebar() {
   return (
     <aside className="hidden w-52 shrink-0 flex-col border-r border-border bg-surface md:flex">
       <div className="border-b border-border px-4 py-4">
-        <div className="text-sm font-semibold text-fg">ScoreSeer</div>
-        <div className="text-xs text-fg-muted">World Cup 2026 · accuracy lab</div>
+        <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-primary text-glow">
+          <BarChart3 className="h-4 w-4" />
+          ScoreSeer
+        </div>
+        <div className="label mt-1.5">World Cup 2026 · accuracy lab</div>
       </div>
       <nav className="flex flex-col gap-0.5 p-2">
         {NAV.map(({ href, label, Icon }) => {
@@ -34,9 +37,9 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm",
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
                 active
-                  ? "bg-surface-2 text-fg"
+                  ? "bg-surface-2 font-medium text-primary"
                   : "text-fg-muted hover:bg-surface-2 hover:text-fg",
               )}
             >
