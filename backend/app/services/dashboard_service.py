@@ -35,8 +35,8 @@ class DashboardService:
     async def metrics(self) -> DashboardMetrics:
         # The headline reflects the LLM estimator (your real predictions); Poisson is
         # the baseline benchmark shown on the Estimators page.
-        rows = await self.repo.graded(include_backfill=False, estimator="llm")
-        all_llm = await self.repo.graded(include_backfill=True, estimator="llm")
+        rows = _dedup_per_fixture(await self.repo.graded(include_backfill=False, estimator="llm"))
+        all_llm = _dedup_per_fixture(await self.repo.graded(include_backfill=True, estimator="llm"))
         backfill_excluded = len(all_llm) - len(rows)
         n = len(rows)
         if n == 0:
@@ -74,6 +74,7 @@ class DashboardService:
 
         out: list[EstimatorStats] = []
         for estimator, grows in sorted(groups.items()):
+            grows = _dedup_per_fixture(grows)
             grades = [g for _, _, _, g in grows]
             out.append(
                 EstimatorStats(
@@ -90,7 +91,7 @@ class DashboardService:
         return out
 
     async def calibration(self) -> CalibrationView:
-        rows = await self.repo.graded(include_backfill=False, estimator="llm")
+        rows = _dedup_per_fixture(await self.repo.graded(include_backfill=False, estimator="llm"))
         profiles = await self.calib.list_all()
         latest = profiles[0] if profiles else None
         first_brier, second_brier = _half_briers(rows)
@@ -110,12 +111,7 @@ class DashboardService:
         # The LLM estimator (your real predictions), one row per fixture. Poisson +
         # the per-estimator comparison live on the Estimators page.
         all_rows = await self.repo.graded(stage=stage, include_backfill=False, estimator="llm")
-        latest: dict[uuid.UUID, GradedRow] = {}
-        for row in all_rows:
-            fid = row[0].id
-            if fid not in latest or row[1].created_at > latest[fid][1].created_at:
-                latest[fid] = row
-        rows = list(latest.values())
+        rows = _dedup_per_fixture(all_rows)
         if outcome == "hit":
             rows = [r for r in rows if r[3].outcome_correct]
         elif outcome == "miss":
@@ -151,6 +147,19 @@ class DashboardService:
 
 def _estimator_name(model_id: str) -> str:
     return "Poisson" if model_id == "poisson-v1" else "LLM"
+
+
+def _dedup_per_fixture(rows: list[GradedRow]) -> list[GradedRow]:
+    """Keep one graded prediction per fixture (the most recent) so a match predicted
+    more than once (e.g. web + batch, or two batch runs) is counted a single time in
+    aggregates. Preserves the incoming kickoff order (the trend/brier helpers rely on it).
+    """
+    latest: dict[uuid.UUID, GradedRow] = {}
+    for row in rows:
+        fid = row[0].id
+        if fid not in latest or row[1].created_at > latest[fid][1].created_at:
+            latest[fid] = row
+    return list(latest.values())
 
 
 def _mean(values) -> float:
